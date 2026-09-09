@@ -118,9 +118,11 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
         val builtInList = defaultDhikrs.map { item ->
             val count = preferences[PrefKeys.countKey(item.id)] ?: 0
             val total = preferences[PrefKeys.totalKey(item.id)] ?: 0L
+            val target = preferences[PrefKeys.targetKey(item.id)] ?: item.targetCount
             val activeTime = preferences[PrefKeys.activeTimeKey(item.id)] ?: 0L
             val lastTap = preferences[PrefKeys.lastTapKey(item.id)] ?: 0L
             item.copy(
+                targetCount = target,
                 currentCount = count,
                 totalCount = total,
                 totalActiveTimeMillis = activeTime,
@@ -166,22 +168,31 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
             val countKey = PrefKeys.countKey(id)
             val totalKey = PrefKeys.totalKey(id)
             val lastTapKey = PrefKeys.lastTapKey(id)
-            val activeTimeKey = PrefKeys.activeTimeKey(id)
 
             val currentCount = preferences[countKey] ?: 0
             val currentTotal = preferences[totalKey] ?: 0L
-            val lastTap = preferences[lastTapKey] ?: 0L
-            val currentActiveTime = preferences[activeTimeKey] ?: 0L
 
             preferences[countKey] = currentCount + 1
             preferences[totalKey] = currentTotal + 1
             preferences[lastTapKey] = now
+        }
+    }
 
-            // Kelajakdagi Timing arxitekturasi:
-            // Agar taplar orasidagi vaqt 3 sekunddan kam bo'lsa, uni aktiv vaqtga qo'shamiz (pause vaqtini chetlab o'tish uchun)
-            if (lastTap > 0 && (now - lastTap) in 100..3000) {
-                preferences[activeTimeKey] = currentActiveTime + (now - lastTap)
+    override suspend fun decrementDhikr(id: String) {
+        context.dataStore.edit { preferences ->
+            val countKey = PrefKeys.countKey(id)
+            val currentCount = preferences[countKey] ?: 0
+            if (currentCount > 0) {
+                preferences[countKey] = currentCount - 1
             }
+        }
+    }
+
+    override suspend fun saveDhikrCounts(id: String, currentCount: Int, totalCount: Long, lastTap: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PrefKeys.countKey(id)] = currentCount
+            preferences[PrefKeys.totalKey(id)] = totalCount
+            preferences[PrefKeys.lastTapKey(id)] = lastTap
         }
     }
 
@@ -189,6 +200,12 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
         context.dataStore.edit { preferences ->
             preferences[PrefKeys.countKey(id)] = 0
             preferences[PrefKeys.lastTapKey(id)] = 0L
+        }
+    }
+
+    override suspend fun updateDhikrTarget(id: String, targetCount: Int) {
+        context.dataStore.edit { preferences ->
+            preferences[PrefKeys.targetKey(id)] = targetCount
         }
     }
 

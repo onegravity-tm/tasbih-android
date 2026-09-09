@@ -15,8 +15,11 @@ interface TasbihRepository {
 
     suspend fun selectDhikr(id: String)
     suspend fun incrementDhikr(id: String)
+    suspend fun decrementDhikr(id: String)
     suspend fun resetDhikr(id: String)
+    suspend fun updateDhikrTarget(id: String, targetCount: Int)
     suspend fun addCustomDhikr(name: String, arabicText: String, targetCount: Int)
     suspend fun deleteCustomDhikr(id: String)
     suspend fun updateSettings(settings: AppSettings)
+    suspend fun saveDhikrCounts(id: String, currentCount: Int, totalCount: Long, lastTap: Long)
 }

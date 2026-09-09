@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -62,6 +63,7 @@ import com.tasbih.app.ui.TasbihUiState
 import com.tasbih.app.ui.TasbihViewModel
 import com.tasbih.app.ui.components.AddDhikrDialog
 import com.tasbih.app.ui.components.DhikrSelectionSheet
+import com.tasbih.app.ui.components.EditTargetDialog
 import com.tasbih.app.ui.components.SettingsSheet
 import com.tasbih.app.ui.theme.TasbihTheme
 
@@ -93,7 +95,8 @@ class MainActivity : ComponentActivity() {
                     onCounterClick = viewModel::onCounterClick,
                     onResetClick = viewModel::onResetClick,
                     onOpenDhikrSheet = { viewModel.setDhikrSheetOpen(true) },
-                    onOpenSettingsSheet = { viewModel.setSettingsSheetOpen(true) }
+                    onOpenSettingsSheet = { viewModel.setSettingsSheetOpen(true) },
+                    onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
                 )
 
                 // Zikrlar ro'yxati sheet
@@ -124,6 +127,16 @@ class MainActivity : ComponentActivity() {
                         onConfirm = viewModel::addCustomDhikr
                     )
                 }
+
+                // Maqsadni tahrirlash dialogi
+                if (uiState.isEditTargetDialogOpen && uiState.currentDhikr != null) {
+                    EditTargetDialog(
+                        dhikrName = uiState.currentDhikr!!.name,
+                        currentTarget = uiState.currentDhikr!!.targetCount,
+                        onDismiss = { viewModel.setEditTargetDialogOpen(false) },
+                        onConfirm = viewModel::updateCurrentDhikrTarget
+                    )
+                }
             }
         }
     }
@@ -131,11 +144,17 @@ class MainActivity : ComponentActivity() {
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             val isVolumeControlEnabled = viewModel.uiState.value.settings.isVolumeButtonsEnabled
-            if (isVolumeControlEnabled &&
-                (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
-            ) {
-                viewModel.onCounterClick()
-                return true // Tizim ovozini o'zgartirmaslik uchun eventni o'zlashtiramiz
+            if (isVolumeControlEnabled) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_VOLUME_UP -> {
+                        viewModel.onCounterClick()
+                        return true // Tizim ovozini o'zgartirmaslik uchun eventni o'zlashtiramiz
+                    }
+                    KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                        viewModel.onCounterDecrement()
+                        return true // Tizim ovozini o'zgartirmaslik uchun eventni o'zlashtiramiz
+                    }
+                }
             }
         }
         return super.dispatchKeyEvent(event)
@@ -149,7 +168,8 @@ fun TasbihApp(
     onCounterClick: () -> Unit,
     onResetClick: () -> Unit,
     onOpenDhikrSheet: () -> Unit,
-    onOpenSettingsSheet: () -> Unit
+    onOpenSettingsSheet: () -> Unit,
+    onEditTargetClick: () -> Unit
 ) {
     val currentDhikr = uiState.currentDhikr
 
@@ -317,22 +337,38 @@ fun TasbihApp(
                                 color = Color.White
                             )
 
-                            Text(
-                                text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
-                                    "Maqsad: ${currentDhikr.targetCount}"
-                                } else {
-                                    "Erkin zikr"
-                                },
-                                fontSize = 16.sp,
-                                color = Color.White.copy(alpha = 0.85f),
-                                fontWeight = FontWeight.Medium
-                            )
+                            // Maqsadni ko'rsatish va ustiga bosganda tahrirlash
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable(onClick = onEditTargetClick)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
+                                        "Maqsad: ${currentDhikr.targetCount}"
+                                    } else {
+                                        "Erkin zikr"
+                                    },
+                                    fontSize = 16.sp,
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.size(4.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Maqsadni tahrirlash",
+                                    tint = Color.White.copy(alpha = 0.75f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
 
                             Text(
                                 text = "Jami: ${currentDhikr?.totalCount ?: 0}",
                                 fontSize = 13.sp,
                                 color = Color.White.copy(alpha = 0.65f),
-                                modifier = Modifier.padding(top = 4.dp)
+                                modifier = Modifier.padding(top = 2.dp)
                             )
                         }
                     }

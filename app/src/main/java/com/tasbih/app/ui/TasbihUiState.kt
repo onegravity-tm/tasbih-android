@@ -13,7 +13,8 @@ data class TasbihUiState(
     val isTargetReached: Boolean = false,
     val isDhikrSheetOpen: Boolean = false,
     val isSettingsSheetOpen: Boolean = false,
-    val isAddDhikrDialogOpen: Boolean = false
+    val isAddDhikrDialogOpen: Boolean = false,
+    val isEditTargetDialogOpen: Boolean = false
 ) {
     val progress: Float
         get() {
