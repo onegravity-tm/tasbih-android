@@ -188,11 +188,12 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
         }
     }
 
-    override suspend fun saveDhikrCounts(id: String, currentCount: Int, totalCount: Long, lastTap: Long) {
+    override suspend fun saveDhikrCounts(id: String, currentCount: Int, totalCount: Long, lastTap: Long, activeTimeMillis: Long) {
         context.dataStore.edit { preferences ->
             preferences[PrefKeys.countKey(id)] = currentCount
             preferences[PrefKeys.totalKey(id)] = totalCount
             preferences[PrefKeys.lastTapKey(id)] = lastTap
+            preferences[PrefKeys.activeTimeKey(id)] = activeTimeMillis
         }
     }
 
@@ -200,6 +201,7 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
         context.dataStore.edit { preferences ->
             preferences[PrefKeys.countKey(id)] = 0
             preferences[PrefKeys.lastTapKey(id)] = 0L
+            preferences[PrefKeys.activeTimeKey(id)] = 0L
         }
     }
 

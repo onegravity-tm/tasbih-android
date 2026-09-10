@@ -17,6 +17,7 @@ import com.tasbih.app.data.model.DhikrItem
 import com.tasbih.app.data.model.VibrationLevel
 import com.tasbih.app.data.repository.TasbihDataStoreRepository
 import com.tasbih.app.data.repository.TasbihRepository
+import com.tasbih.app.data.timing.DhikrTimingManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -43,27 +44,50 @@ class TasbihViewModel(
     )
 
     // PERFORMANCE FIX: In-Memory tezkor hisob xotirasi (0ms UI latency uchun)
-    // Map<DhikrId, Pair<currentCount, totalCount>>
-    private val _inMemoryCounts = MutableStateFlow<Map<String, Pair<Int, Long>>>(emptyMap())
+    // Map<DhikrId, Triple<currentCount, totalCount, activeTimeMillis>>
+    private val _inMemoryCounts = MutableStateFlow<Map<String, Triple<Int, Long, Long>>>(emptyMap())
+
+    // Timing tizimi: Zikr aytish faol vaqti va dinamik pauza
+    private val timingManager = DhikrTimingManager()
+    private val _sessionActiveTimeMillis = MutableStateFlow(0L)
+    private val _isTimingPaused = MutableStateFlow(true)
+    private var timerTickerJob: Job? = null
 
     // Diskka yozishni (DataStore I/O) asinxron kechiktirib (debounced) bajarish
     private var debounceSaveJob: Job? = null
     private var pendingSaveDhikrId: String? = null
     private var pendingSaveCount: Int = 0
     private var pendingSaveTotal: Long = 0L
+    private var pendingSaveActiveTime: Long = 0L
 
     val uiState: StateFlow<TasbihUiState> = combine(
         repository.dhikrListFlow,
         repository.selectedDhikrIdFlow,
         repository.settingsFlow,
         _inMemoryCounts,
-        _dialogState
-    ) { repoDhikrs, selectedId, settings, memoryCounts, dialogs ->
+        _dialogState,
+        _sessionActiveTimeMillis,
+        _isTimingPaused
+    ) { args: Array<Any> ->
+        @Suppress("UNCHECKED_CAST")
+        val repoDhikrs = args[0] as List<DhikrItem>
+        val selectedId = args[1] as String
+        val settings = args[2] as AppSettings
+        @Suppress("UNCHECKED_CAST")
+        val memoryCounts = args[3] as Map<String, Triple<Int, Long, Long>>
+        val dialogs = args[4] as DialogState
+        val sessionActiveTime = args[5] as Long
+        val isPaused = args[6] as Boolean
+
         // Repozitoriya ma'lumotlarini in-memory eng yangi hisob bilan birlashtiramiz
         val mergedDhikrs = repoDhikrs.map { item ->
             val mem = memoryCounts[item.id]
             if (mem != null) {
-                item.copy(currentCount = mem.first, totalCount = mem.second)
+                item.copy(
+                    currentCount = mem.first,
+                    totalCount = mem.second,
+                    totalActiveTimeMillis = mem.third
+                )
             } else {
                 item
             }
@@ -80,7 +104,9 @@ class TasbihViewModel(
             isDhikrSheetOpen = dialogs.isDhikrSheetOpen,
             isSettingsSheetOpen = dialogs.isSettingsSheetOpen,
             isAddDhikrDialogOpen = dialogs.isAddDhikrDialogOpen,
-            isEditTargetDialogOpen = dialogs.isEditTargetDialogOpen
+            isEditTargetDialogOpen = dialogs.isEditTargetDialogOpen,
+            sessionActiveTimeMillis = sessionActiveTime,
+            isTimingPaused = isPaused
         )
     }.stateIn(
         scope = viewModelScope,
@@ -106,15 +132,25 @@ class TasbihViewModel(
         val newCount = current.currentCount + 1
         val newTotal = current.totalCount + 1
 
-        // 1. In-Memory holatni darhol (0ms kechikishsiz) yangilaymiz
-        updateMemoryCount(current.id, newCount, newTotal)
+        // 1. Timing: TAP orqali qo'shiladigan sof faol vaqtni hisoblash
+        val deltaMs = timingManager.onDhikrTap()
+        val currentActiveTime = current.totalActiveTimeMillis + deltaMs
+        val newSessionTime = _sessionActiveTimeMillis.value + deltaMs
+        _sessionActiveTimeMillis.value = newSessionTime
+        _isTimingPaused.value = false
 
-        // 2. Taktil va ovozli aloqa (UI threadni to'xtatmaslik uchun)
+        // 2. In-Memory holatni darhol (0ms kechikishsiz) yangilaymiz
+        updateMemoryCount(current.id, newCount, newTotal, currentActiveTime)
+
+        // 3. Taktil va ovozli aloqa (UI threadni to'xtatmaslik uchun)
         val isTargetReached = current.targetCount > 0 && newCount == current.targetCount
         triggerHapticAndSound(uiState.value.settings, isTargetReached)
 
-        // 3. Diskka (DataStore'ga) asinxron debounced yozish
-        scheduleDebouncedSave(current.id, newCount, newTotal)
+        // 4. Diskka (DataStore'ga) asinxron debounced yozish
+        scheduleDebouncedSave(current.id, newCount, newTotal, currentActiveTime)
+
+        // 5. Pauza monitoringi (agar foydalanuvchi uzoq bosmasa pauza holatiga o'tkazish)
+        startPauseWatcher()
     }
 
     /**
@@ -125,12 +161,12 @@ class TasbihViewModel(
         if (current.currentCount <= 0) return // 0 dan pastga tushmaydi
 
         val newCount = current.currentCount - 1
-        // Adashganda orqaga qaytarish totalCount'ni kamaytirmaydi, currentCount'ni to'g'irlaydi
         val currentTotal = current.totalCount
+        val currentActive = current.totalActiveTimeMillis
 
-        updateMemoryCount(current.id, newCount, currentTotal)
+        updateMemoryCount(current.id, newCount, currentTotal, currentActive)
         triggerHaptic(VibrationLevel.LIGHT)
-        scheduleDebouncedSave(current.id, newCount, currentTotal)
+        scheduleDebouncedSave(current.id, newCount, currentTotal, currentActive)
     }
 
     /**
@@ -140,7 +176,12 @@ class TasbihViewModel(
         val current = uiState.value.currentDhikr ?: return
         flushPendingSave()
 
-        updateMemoryCount(current.id, 0, current.totalCount)
+        timingManager.reset()
+        _sessionActiveTimeMillis.value = 0L
+        _isTimingPaused.value = true
+        timerTickerJob?.cancel()
+
+        updateMemoryCount(current.id, 0, current.totalCount, 0L)
         triggerHaptic(VibrationLevel.LIGHT)
 
         viewModelScope.launch(Dispatchers.IO) {
@@ -206,21 +247,42 @@ class TasbihViewModel(
         _dialogState.value = _dialogState.value.copy(isEditTargetDialogOpen = isOpen)
     }
 
-    private fun updateMemoryCount(id: String, count: Int, total: Long) {
+    fun onAppBackgrounded() {
+        timingManager.pauseTiming()
+        _isTimingPaused.value = true
+        timerTickerJob?.cancel()
+        flushPendingSave()
+    }
+
+    private fun startPauseWatcher() {
+        timerTickerJob?.cancel()
+        timerTickerJob = viewModelScope.launch {
+            while (!_isTimingPaused.value) {
+                delay(1000)
+                if (timingManager.isPaused()) {
+                    _isTimingPaused.value = true
+                    break
+                }
+            }
+        }
+    }
+
+    private fun updateMemoryCount(id: String, count: Int, total: Long, activeTime: Long) {
         val currentMap = _inMemoryCounts.value.toMutableMap()
-        currentMap[id] = Pair(count, total)
+        currentMap[id] = Triple(count, total, activeTime)
         _inMemoryCounts.value = currentMap
     }
 
-    private fun scheduleDebouncedSave(id: String, count: Int, total: Long) {
+    private fun scheduleDebouncedSave(id: String, count: Int, total: Long, activeTime: Long) {
         pendingSaveDhikrId = id
         pendingSaveCount = count
         pendingSaveTotal = total
+        pendingSaveActiveTime = activeTime
 
         debounceSaveJob?.cancel()
         debounceSaveJob = viewModelScope.launch(Dispatchers.IO) {
             delay(400) // 400ms bosishlar oralig'ini kutish (fonda silliq saqlash)
-            repository.saveDhikrCounts(id, count, total, System.currentTimeMillis())
+            repository.saveDhikrCounts(id, count, total, System.currentTimeMillis(), activeTime)
             pendingSaveDhikrId = null
         }
     }
@@ -229,7 +291,7 @@ class TasbihViewModel(
         val id = pendingSaveDhikrId ?: return
         debounceSaveJob?.cancel()
         viewModelScope.launch(Dispatchers.IO) {
-            repository.saveDhikrCounts(id, pendingSaveCount, pendingSaveTotal, System.currentTimeMillis())
+            repository.saveDhikrCounts(id, pendingSaveCount, pendingSaveTotal, System.currentTimeMillis(), pendingSaveActiveTime)
             pendingSaveDhikrId = null
         }
     }

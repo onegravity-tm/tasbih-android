@@ -142,6 +142,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        viewModel.onAppBackgrounded()
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN) {
             val isVolumeControlEnabled = viewModel.uiState.value.settings.isVolumeButtonsEnabled
@@ -376,6 +381,47 @@ fun TasbihApp(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(15.dp)
                         )
+                    }
+                }
+
+                // 3-Faza: Zikr Timing / Timer ko'rsatkichi (Minimal va ixcham)
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                    ) {
+                        // Kichik holat nuqtasi (yashil = faol, kulrang = pauza)
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    if (!uiState.isTimingPaused) {
+                                        Color(0xFF4CAF50) // Yashil (Active)
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) // Kulrang (Paused)
+                                    }
+                                )
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Faol vaqt: ${uiState.formattedSessionTime}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                        )
+                        if (uiState.isTimingPaused && uiState.sessionActiveTimeMillis > 0L) {
+                            Text(
+                                text = " (pauza)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.padding(start = 3.dp)
+                            )
+                        }
                     }
                 }
 
