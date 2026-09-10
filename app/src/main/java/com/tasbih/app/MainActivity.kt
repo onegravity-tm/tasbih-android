@@ -332,45 +332,49 @@ fun TasbihApp(
                         ) {
                             Text(
                                 text = "${currentDhikr?.currentCount ?: 0}",
-                                fontSize = 72.sp,
+                                fontSize = 76.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
 
-                            // Maqsadni ko'rsatish va ustiga bosganda tahrirlash
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .clickable(onClick = onEditTargetClick)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
-                                        "Maqsad: ${currentDhikr.targetCount}"
-                                    } else {
-                                        "Erkin zikr"
-                                    },
-                                    fontSize = 16.sp,
-                                    color = Color.White.copy(alpha = 0.9f),
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.size(4.dp))
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = "Maqsadni tahrirlash",
-                                    tint = Color.White.copy(alpha = 0.75f),
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
-
                             Text(
                                 text = "Jami: ${currentDhikr?.totalCount ?: 0}",
-                                fontSize = 13.sp,
-                                color = Color.White.copy(alpha = 0.65f),
-                                modifier = Modifier.padding(top = 2.dp)
+                                fontSize = 14.sp,
+                                color = Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier.padding(top = 4.dp)
                             )
                         }
+                    }
+                }
+
+                // Alohida, kichik va aniq Target Edit control (Counter doirasidan to'liq tashqarida)
+                Surface(
+                    onClick = onEditTargetClick,
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
+                                "Maqsad: ${currentDhikr.targetCount}"
+                            } else {
+                                "Erkin zikr"
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Maqsadni tahrirlash",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(15.dp)
+                        )
                     }
                 }
 
