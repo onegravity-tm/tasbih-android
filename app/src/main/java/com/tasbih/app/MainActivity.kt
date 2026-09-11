@@ -141,34 +141,6 @@ class MainActivity : ComponentActivity() {
                         onConfirm = viewModel::updateCurrentDhikrTarget
                     )
                 }
-
-                // 3-Faza: Zikr birinchi marta boshlanganda ritm kalibratsiyasi ogohlantirish dialogi
-                if (uiState.isCalibrationDialogOpen) {
-                    AlertDialog(
-                        onDismissRequest = { viewModel.dismissCalibrationDialog() },
-                        title = {
-                            Text(
-                                text = stringResource(id = R.string.calibration_dialog_title),
-                                fontWeight = FontWeight.Bold
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = stringResource(id = R.string.calibration_dialog_message),
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { viewModel.dismissCalibrationDialog() }) {
-                                Text(
-                                    text = stringResource(id = R.string.calibration_dialog_button),
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        },
-                        shape = RoundedCornerShape(18.dp)
-                    )
-                }
             }
         }
     }

@@ -1,6 +1,12 @@
-﻿package com.tasbih.app.data.timing
+package com.tasbih.app.data.timing
 
 import java.util.ArrayDeque
+
+enum class TapClassification {
+    ACTIVE_NORMAL,      // <= 1.5 * T_avg: faol, average'ga qo'shiladi
+    ACTIVE_BORDERLINE,  // 1.5x .. 2.0x: faol, average'ga qo'shilmaydi
+    PAUSE               // > 2.0x: pauza deb topildi
+}
 
 /**
  * Har bir zikr uchun alohida ishlovchi mustaqil Timing menejeri.
@@ -33,8 +39,6 @@ class DhikrTimingManager(
     private val maxThresholdMs: Long = 8000L
 ) {
     private val recentIntervals = ArrayDeque<Long>()
-    private var lastTapTimestamp: Long = 0L
-    private var isTimingActive: Boolean = false
 
     var isCalibrated: Boolean = initialIsCalibrated
         private set
@@ -49,23 +53,13 @@ class DhikrTimingManager(
     }
 
     /**
-     * Yangi TAP kelganda chaqiriladi.
-     * @param now Hozirgi millisekund vaqti (System.currentTimeMillis())
-     * @return Pair<ActiveDeltaMillis, NewlyCalibrated: Boolean>
+     * Tap oralig'idagi intervalni klassifikatsiya qiladi va ritmni yangilaydi.
+     * @param interval Oxirgi va yangi tap orasidagi millisekund farqi
+     * @return Pair<TapClassification, NewlyCalibrated: Boolean>
      */
-    fun onDhikrTap(now: Long = System.currentTimeMillis()): Pair<Long, Boolean> {
-        if (!isTimingActive || lastTapTimestamp <= 0L) {
-            // Sessiyadagi birinchi tap: faol vaqt hali 0 ms
-            lastTapTimestamp = now
-            isTimingActive = true
-            return Pair(0L, false)
-        }
-
-        val interval = now - lastTapTimestamp
-        lastTapTimestamp = now
-
+    fun classifyAndRecordTap(interval: Long): Pair<TapClassification, Boolean> {
         if (interval <= 0L) {
-            return Pair(0L, false)
+            return Pair(TapClassification.ACTIVE_NORMAL, false)
         }
 
         var newlyCalibrated = false
@@ -79,57 +73,47 @@ class DhikrTimingManager(
                     normalIntervalMs = recentIntervals.average().toLong()
                     newlyCalibrated = true
                 }
-                return Pair(interval, newlyCalibrated)
+                return Pair(TapClassification.ACTIVE_NORMAL, newlyCalibrated)
             } else {
                 // Warmup paytida ham uzoq kutish pauza deb olinadi
-                return Pair(0L, false)
+                return Pair(TapClassification.PAUSE, false)
             }
         }
 
         // Kalibratsiyadan o'tgan zikr uchun Adaptive 1.5x / 2.0x qoidalari:
         val currentAvg = calculateCurrentAvg()
         val limit15x = (currentAvg * 1.5).toLong()
-        val pauseLimit20x = (currentAvg * 2.0).toLong().coerceIn(minThresholdMs, maxThresholdMs)
+        val pauseLimit20x = getPauseLimit()
 
         return when {
             // 1. Interval <= 1.5 * T_avg -> faol vaqtga qo'shiladi va rolling average'ga kiritiladi
             interval <= limit15x -> {
                 recordInterval(interval)
-                Pair(interval, false)
+                Pair(TapClassification.ACTIVE_NORMAL, false)
             }
             // 2. 1.5 * T_avg < interval <= 2.0 * T_avg -> faol vaqtga qo'shiladi, lekin ritm buzilmasligi uchun rolling average'ga kiritilmaydi
             interval <= pauseLimit20x -> {
-                Pair(interval, false)
+                Pair(TapClassification.ACTIVE_BORDERLINE, false)
             }
-            // 3. Interval > 2.0 * T_avg -> PAUSE: 0 ms qo'shiladi
+            // 3. Interval > 2.0 * T_avg -> PAUSE: vaqt qo'shilmaydi
             else -> {
-                Pair(0L, false)
+                Pair(TapClassification.PAUSE, false)
             }
         }
     }
 
-    fun pauseTiming() {
-        isTimingActive = false
-        lastTapTimestamp = 0L
+    fun getPauseLimit(): Long {
+        val currentAvg = calculateCurrentAvg()
+        return (currentAvg * 2.0).toLong().coerceIn(minThresholdMs, maxThresholdMs)
     }
 
     fun reset() {
         recentIntervals.clear()
-        lastTapTimestamp = 0L
-        isTimingActive = false
         isCalibrated = false
         normalIntervalMs = 0L
     }
 
-    fun isPaused(now: Long = System.currentTimeMillis()): Boolean {
-        if (!isTimingActive || lastTapTimestamp <= 0L) return true
-        val delta = now - lastTapTimestamp
-        val currentAvg = calculateCurrentAvg()
-        val pauseLimit = (currentAvg * 2.0).toLong().coerceIn(minThresholdMs, maxThresholdMs)
-        return delta > pauseLimit
-    }
-
-    private fun calculateCurrentAvg(): Long {
+    fun calculateCurrentAvg(): Long {
         if (recentIntervals.isEmpty()) {
             return if (normalIntervalMs > 0L) normalIntervalMs else 1500L
         }

@@ -15,8 +15,8 @@ data class TasbihUiState(
     val isSettingsSheetOpen: Boolean = false,
     val isAddDhikrDialogOpen: Boolean = false,
     val isEditTargetDialogOpen: Boolean = false,
-    val isCalibrationDialogOpen: Boolean = false,
-    val isTimingPaused: Boolean = true
+    val isTimingPaused: Boolean = true,
+    val displayTimeMillis: Long = 0L
 ) {
     val progress: Float
         get() {
@@ -34,8 +34,7 @@ data class TasbihUiState(
      */
     val formattedTotalTime: String
         get() {
-            val totalMs = currentDhikr?.totalActiveTimeMillis ?: 0L
-            val totalSeconds = (totalMs / 1000).coerceAtLeast(0L)
+            val totalSeconds = (displayTimeMillis / 1000).coerceAtLeast(0L)
             val hours = totalSeconds / 3600
             val minutes = (totalSeconds % 3600) / 60
             val seconds = totalSeconds % 60
