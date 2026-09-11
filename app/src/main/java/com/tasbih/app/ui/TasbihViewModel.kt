@@ -50,6 +50,9 @@ class TasbihViewModel(
     // Map<DhikrId, Triple<currentCount, totalCount, activeTimeMillis>>
     private val _inMemoryCounts = MutableStateFlow<Map<String, Triple<Int, Long, Long>>>(emptyMap())
 
+    // Zikr tanlanganda 0ms ichida UI va Timing uzilishini ta'minlovchi tezkor override
+    private val _selectedDhikrIdOverride = MutableStateFlow<String?>(null)
+
     // Har bir zikr uchun ALOHIDA mustaqil TimingManager
     private val timingManagers = mutableMapOf<String, DhikrTimingManager>()
     private val _isTimingPaused = MutableStateFlow(true)
@@ -73,21 +76,25 @@ class TasbihViewModel(
     val uiState: StateFlow<TasbihUiState> = combine(
         repository.dhikrListFlow,
         repository.selectedDhikrIdFlow,
+        _selectedDhikrIdOverride,
         repository.settingsFlow,
         _inMemoryCounts,
         _dialogState,
         _isTimingPaused,
         _displayTimeMillis
-    ) { args: Array<Any> ->
+    ) { args: Array<Any?> ->
         @Suppress("UNCHECKED_CAST")
         val repoDhikrs = args[0] as List<DhikrItem>
-        val selectedId = args[1] as String
-        val settings = args[2] as AppSettings
+        val repoSelectedId = args[1] as String
+        val overrideId = args[2] as? String
+        val settings = args[3] as AppSettings
         @Suppress("UNCHECKED_CAST")
-        val memoryCounts = args[3] as Map<String, Triple<Int, Long, Long>>
-        val dialogs = args[4] as DialogState
-        val isPaused = args[5] as Boolean
-        val displayTime = args[6] as Long
+        val memoryCounts = args[4] as Map<String, Triple<Int, Long, Long>>
+        val dialogs = args[5] as DialogState
+        val isPaused = args[6] as Boolean
+        val displayTime = args[7] as Long
+
+        val selectedId = overrideId ?: repoSelectedId
 
         // Repozitoriya ma'lumotlarini in-memory eng yangi hisob bilan birlashtiramiz
         val mergedDhikrs = repoDhikrs.map { item ->
@@ -136,13 +143,20 @@ class TasbihViewModel(
     }
 
     private fun getOrCreateTimingManager(dhikr: DhikrItem): DhikrTimingManager {
-        return timingManagers.getOrPut(dhikr.id) {
-            DhikrTimingManager(
-                dhikrId = dhikr.id,
-                initialIsCalibrated = dhikr.isCalibrated,
-                initialNormalIntervalMs = dhikr.normalIntervalMs
-            )
+        val existing = timingManagers[dhikr.id]
+        if (existing != null) {
+            if (dhikr.isCalibrated && !existing.isCalibrated) {
+                existing.syncFromSavedState(dhikr.isCalibrated, dhikr.normalIntervalMs)
+            }
+            return existing
         }
+        val newManager = DhikrTimingManager(
+            dhikrId = dhikr.id,
+            initialIsCalibrated = dhikr.isCalibrated,
+            initialNormalIntervalMs = dhikr.normalIntervalMs
+        )
+        timingManagers[dhikr.id] = newManager
+        return newManager
     }
 
     /**
@@ -199,6 +213,12 @@ class TasbihViewModel(
                 scheduleDebouncedSave(dhikrId, current.currentCount, current.totalCount, newActiveTime)
             }
         }
+        val manager = timingManagers[dhikrId]
+        if (manager != null && manager.isCalibrated) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.updateDhikrCalibration(dhikrId, true, manager.normalIntervalMs)
+            }
+        }
         activeSessionStartUptime = 0L
         lastTapUptime = 0L
         sessionAccumulatedMs = 0L
@@ -218,6 +238,12 @@ class TasbihViewModel(
                 updateMemoryCount(dhikrId, current.currentCount, current.totalCount, newActiveTime)
                 activeSessionStartUptime = lastTapUptime
                 sessionAccumulatedMs = 0L
+            }
+        }
+        val manager = timingManagers[dhikrId]
+        if (manager != null && manager.isCalibrated) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.updateDhikrCalibration(dhikrId, true, manager.normalIntervalMs)
             }
         }
     }
@@ -350,6 +376,8 @@ class TasbihViewModel(
         }
         flushPendingSave()
 
+        // 0ms ichida UI va timing state yangi zikrga o'tadi
+        _selectedDhikrIdOverride.value = id
         _isTimingPaused.value = true
         activeSessionDhikrId = null
         activeSessionStartUptime = 0L

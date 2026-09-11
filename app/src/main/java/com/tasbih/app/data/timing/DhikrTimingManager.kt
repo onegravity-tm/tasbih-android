@@ -104,7 +104,23 @@ class DhikrTimingManager(
 
     fun getPauseLimit(): Long {
         val currentAvg = calculateCurrentAvg()
+        if (currentAvg <= 0L || !isCalibrated) {
+            // Hali kalibratsiyalanmagan zikr uchun keng va xavfsiz warmup threshold (4500ms).
+            // Bu yangi zikrning o'z ritmini (masalan 2.3s) boshqa zikrlardan to'liq mustaqil
+            // va erkin o'rganib olishiga kafolat beradi.
+            return defaultWarmupThresholdMs
+        }
         return (currentAvg * 2.0).toLong().coerceIn(minThresholdMs, maxThresholdMs)
+    }
+
+    fun syncFromSavedState(savedIsCalibrated: Boolean, savedNormalIntervalMs: Long) {
+        if (savedIsCalibrated && !isCalibrated) {
+            isCalibrated = true
+            normalIntervalMs = savedNormalIntervalMs
+            if (savedNormalIntervalMs > 0L && recentIntervals.isEmpty()) {
+                recentIntervals.addLast(savedNormalIntervalMs)
+            }
+        }
     }
 
     fun reset() {
@@ -115,7 +131,7 @@ class DhikrTimingManager(
 
     fun calculateCurrentAvg(): Long {
         if (recentIntervals.isEmpty()) {
-            return if (normalIntervalMs > 0L) normalIntervalMs else 1500L
+            return if (normalIntervalMs > 0L) normalIntervalMs else 0L
         }
         return recentIntervals.average().toLong().coerceAtLeast(500L)
     }
