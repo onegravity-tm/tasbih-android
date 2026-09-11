@@ -37,6 +37,8 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
         fun targetKey(id: String) = intPreferencesKey("target_$id")
         fun activeTimeKey(id: String) = longPreferencesKey("active_time_$id")
         fun lastTapKey(id: String) = longPreferencesKey("last_tap_$id")
+        fun isCalibratedKey(id: String) = booleanPreferencesKey("is_calibrated_$id")
+        fun normalIntervalKey(id: String) = longPreferencesKey("normal_interval_$id")
     }
 
     private val defaultDhikrs = listOf(
@@ -121,12 +123,16 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
             val target = preferences[PrefKeys.targetKey(item.id)] ?: item.targetCount
             val activeTime = preferences[PrefKeys.activeTimeKey(item.id)] ?: 0L
             val lastTap = preferences[PrefKeys.lastTapKey(item.id)] ?: 0L
+            val isCalibrated = preferences[PrefKeys.isCalibratedKey(item.id)] ?: false
+            val normalInterval = preferences[PrefKeys.normalIntervalKey(item.id)] ?: 0L
             item.copy(
                 targetCount = target,
                 currentCount = count,
                 totalCount = total,
                 totalActiveTimeMillis = activeTime,
-                lastActiveTimestamp = lastTap
+                lastActiveTimestamp = lastTap,
+                isCalibrated = isCalibrated,
+                normalIntervalMs = normalInterval
             )
         }
 
@@ -138,6 +144,8 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
             val total = preferences[PrefKeys.totalKey(id)] ?: 0L
             val activeTime = preferences[PrefKeys.activeTimeKey(id)] ?: 0L
             val lastTap = preferences[PrefKeys.lastTapKey(id)] ?: 0L
+            val isCalibrated = preferences[PrefKeys.isCalibratedKey(id)] ?: false
+            val normalInterval = preferences[PrefKeys.normalIntervalKey(id)] ?: 0L
 
             DhikrItem(
                 id = id,
@@ -149,7 +157,9 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
                 isCustom = true,
                 orderIndex = 100,
                 totalActiveTimeMillis = activeTime,
-                lastActiveTimestamp = lastTap
+                lastActiveTimestamp = lastTap,
+                isCalibrated = isCalibrated,
+                normalIntervalMs = normalInterval
             )
         }
 
@@ -202,6 +212,15 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
             preferences[PrefKeys.countKey(id)] = 0
             preferences[PrefKeys.lastTapKey(id)] = 0L
             preferences[PrefKeys.activeTimeKey(id)] = 0L
+            preferences[PrefKeys.isCalibratedKey(id)] = false
+            preferences[PrefKeys.normalIntervalKey(id)] = 0L
+        }
+    }
+
+    override suspend fun updateDhikrCalibration(id: String, isCalibrated: Boolean, normalIntervalMs: Long) {
+        context.dataStore.edit { preferences ->
+            preferences[PrefKeys.isCalibratedKey(id)] = isCalibrated
+            preferences[PrefKeys.normalIntervalKey(id)] = normalIntervalMs
         }
     }
 

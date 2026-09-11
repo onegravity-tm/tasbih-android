@@ -18,5 +18,7 @@ data class DhikrItem(
     val orderIndex: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
     val totalActiveTimeMillis: Long = 0L,
-    val lastActiveTimestamp: Long = 0L
+    val lastActiveTimestamp: Long = 0L,
+    val isCalibrated: Boolean = false,
+    val normalIntervalMs: Long = 0L
 )

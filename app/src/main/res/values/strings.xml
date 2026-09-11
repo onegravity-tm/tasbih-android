@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Tasbih</string>
+    <string name="timing_total_time_label">Jami vaqt:</string>
+    <string name="timing_paused_label">(pauza)</string>
+    <string name="calibration_dialog_title">Ritm va vaqt hisobi</string>
+    <string name="calibration_dialog_message">Zikrni iltimos, o‘zingizning odatiy tezligingizda ayting. Bu zikrga ketadigan vaqtni aniqroq hisoblashga yordam beradi.</string>
+    <string name="calibration_dialog_button">Tushundim</string>
+    <string name="target_label">Maqsad: %1$d</string>
+    <string name="free_dhikr_label">Erkin zikr</string>
+    <string name="total_count_label">Jami: %1$d</string>
+    <string name="reset_button_label">Nolga tushirish</string>
+    <string name="target_reached_badge">Maqsadga erishildi! 🎉</string>
 </resources>

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -42,6 +43,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -55,6 +57,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -136,6 +139,34 @@ class MainActivity : ComponentActivity() {
                         currentTarget = uiState.currentDhikr!!.targetCount,
                         onDismiss = { viewModel.setEditTargetDialogOpen(false) },
                         onConfirm = viewModel::updateCurrentDhikrTarget
+                    )
+                }
+
+                // 3-Faza: Zikr birinchi marta boshlanganda ritm kalibratsiyasi ogohlantirish dialogi
+                if (uiState.isCalibrationDialogOpen) {
+                    AlertDialog(
+                        onDismissRequest = { viewModel.dismissCalibrationDialog() },
+                        title = {
+                            Text(
+                                text = stringResource(id = R.string.calibration_dialog_title),
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = stringResource(id = R.string.calibration_dialog_message),
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { viewModel.dismissCalibrationDialog() }) {
+                                Text(
+                                    text = stringResource(id = R.string.calibration_dialog_button),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(18.dp)
                     )
                 }
             }
@@ -384,7 +415,7 @@ fun TasbihApp(
                     }
                 }
 
-                // 3-Faza: Zikr Timing / Timer ko'rsatkichi (Minimal va ixcham)
+                // 3-Faza: Zikr Timing ko'rsatkichi — Har bir zikrning "Jami vaqti" (Variant A floor formatlash)
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -409,17 +440,17 @@ fun TasbihApp(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Faol vaqt: ${uiState.formattedSessionTime}",
+                            text = "${stringResource(id = R.string.timing_total_time_label)} ${uiState.formattedTotalTime}",
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
                         )
-                        if (uiState.isTimingPaused && uiState.sessionActiveTimeMillis > 0L) {
+                        if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) {
                             Text(
-                                text = " (pauza)",
+                                text = " ${stringResource(id = R.string.timing_paused_label)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(start = 3.dp)
+                                modifier = Modifier.padding(start = 2.dp)
                             )
                         }
                     }

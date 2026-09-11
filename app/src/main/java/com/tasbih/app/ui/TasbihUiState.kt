@@ -15,7 +15,7 @@ data class TasbihUiState(
     val isSettingsSheetOpen: Boolean = false,
     val isAddDhikrDialogOpen: Boolean = false,
     val isEditTargetDialogOpen: Boolean = false,
-    val sessionActiveTimeMillis: Long = 0L,
+    val isCalibrationDialogOpen: Boolean = false,
     val isTimingPaused: Boolean = true
 ) {
     val progress: Float
@@ -25,16 +25,25 @@ data class TasbihUiState(
             return (dhikr.currentCount.toFloat() / dhikr.targetCount.toFloat()).coerceIn(0f, 1f)
         }
 
-    val formattedSessionTime: String
+    /**
+     * Variant A: Floor / Truncation (kasr sekund tashlanadi).
+     * 43.8s -> 43s
+     * 59.9s -> 59s
+     * 60.0s -> 1m 0s
+     * 1m 18.9s -> 1m 18s
+     */
+    val formattedTotalTime: String
         get() {
-            val totalSeconds = (sessionActiveTimeMillis / 1000).coerceAtLeast(0)
+            val totalMs = currentDhikr?.totalActiveTimeMillis ?: 0L
+            val totalSeconds = (totalMs / 1000).coerceAtLeast(0L)
             val hours = totalSeconds / 3600
             val minutes = (totalSeconds % 3600) / 60
             val seconds = totalSeconds % 60
-            return if (hours > 0) {
-                String.format("%02d:%02d:%02d", hours, minutes, seconds)
-            } else {
-                String.format("%02d:%02d", minutes, seconds)
+
+            return when {
+                hours > 0 -> "${hours}s ${minutes}m ${seconds}s"
+                minutes > 0 -> "${minutes}m ${seconds}s"
+                else -> "${seconds}s"
             }
         }
 }

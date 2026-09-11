@@ -22,4 +22,5 @@ interface TasbihRepository {
     suspend fun deleteCustomDhikr(id: String)
     suspend fun updateSettings(settings: AppSettings)
     suspend fun saveDhikrCounts(id: String, currentCount: Int, totalCount: Long, lastTap: Long, activeTimeMillis: Long)
+    suspend fun updateDhikrCalibration(id: String, isCalibrated: Boolean, normalIntervalMs: Long)
 }

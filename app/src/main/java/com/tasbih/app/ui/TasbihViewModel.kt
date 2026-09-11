@@ -33,13 +33,14 @@ class TasbihViewModel(
     private val repository: TasbihRepository = TasbihDataStoreRepository(application.applicationContext)
 ) : AndroidViewModel(application) {
 
-    // Sheet va Dialoglar holati (isDhikr, isSettings, isAdd, isEditTarget)
+    // Sheet va Dialoglar holati (isDhikr, isSettings, isAdd, isEditTarget, isCalibrationDialog)
     private val _dialogState = MutableStateFlow(
         DialogState(
             isDhikrSheetOpen = false,
             isSettingsSheetOpen = false,
             isAddDhikrDialogOpen = false,
-            isEditTargetDialogOpen = false
+            isEditTargetDialogOpen = false,
+            isCalibrationDialogOpen = false
         )
     )
 
@@ -47,11 +48,11 @@ class TasbihViewModel(
     // Map<DhikrId, Triple<currentCount, totalCount, activeTimeMillis>>
     private val _inMemoryCounts = MutableStateFlow<Map<String, Triple<Int, Long, Long>>>(emptyMap())
 
-    // Timing tizimi: Zikr aytish faol vaqti va dinamik pauza
-    private val timingManager = DhikrTimingManager()
-    private val _sessionActiveTimeMillis = MutableStateFlow(0L)
+    // Har bir zikr uchun ALOHIDA mustaqil TimingManager
+    private val timingManagers = mutableMapOf<String, DhikrTimingManager>()
     private val _isTimingPaused = MutableStateFlow(true)
-    private var timerTickerJob: Job? = null
+    private var pauseWatcherJob: Job? = null
+    private var tapCounterSinceLastFlush = 0
 
     // Diskka yozishni (DataStore I/O) asinxron kechiktirib (debounced) bajarish
     private var debounceSaveJob: Job? = null
@@ -66,7 +67,6 @@ class TasbihViewModel(
         repository.settingsFlow,
         _inMemoryCounts,
         _dialogState,
-        _sessionActiveTimeMillis,
         _isTimingPaused
     ) { args: Array<Any> ->
         @Suppress("UNCHECKED_CAST")
@@ -76,8 +76,7 @@ class TasbihViewModel(
         @Suppress("UNCHECKED_CAST")
         val memoryCounts = args[3] as Map<String, Triple<Int, Long, Long>>
         val dialogs = args[4] as DialogState
-        val sessionActiveTime = args[5] as Long
-        val isPaused = args[6] as Boolean
+        val isPaused = args[5] as Boolean
 
         // Repozitoriya ma'lumotlarini in-memory eng yangi hisob bilan birlashtiramiz
         val mergedDhikrs = repoDhikrs.map { item ->
@@ -105,7 +104,7 @@ class TasbihViewModel(
             isSettingsSheetOpen = dialogs.isSettingsSheetOpen,
             isAddDhikrDialogOpen = dialogs.isAddDhikrDialogOpen,
             isEditTargetDialogOpen = dialogs.isEditTargetDialogOpen,
-            sessionActiveTimeMillis = sessionActiveTime,
+            isCalibrationDialogOpen = dialogs.isCalibrationDialogOpen,
             isTimingPaused = isPaused
         )
     }.stateIn(
@@ -124,33 +123,69 @@ class TasbihViewModel(
         }
     }
 
+    private fun getOrCreateTimingManager(dhikr: DhikrItem): DhikrTimingManager {
+        return timingManagers.getOrPut(dhikr.id) {
+            DhikrTimingManager(
+                dhikrId = dhikr.id,
+                initialIsCalibrated = dhikr.isCalibrated,
+                initialNormalIntervalMs = dhikr.normalIntervalMs
+            )
+        }
+    }
+
     /**
      * Counter +1 (Ekranni bosganda yoki Volume Up orqali)
      */
     fun onCounterClick() {
         val current = uiState.value.currentDhikr ?: return
+
+        // 1. Agar birinchi marta bo'lsa va kalibratsiyalanmagan bo'lsa, ogohlantirish dialogini ko'rsatish
+        if (!current.isCalibrated && current.totalCount == 0L && !_dialogState.value.isCalibrationDialogOpen) {
+            _dialogState.value = _dialogState.value.copy(isCalibrationDialogOpen = true)
+        }
+
         val newCount = current.currentCount + 1
         val newTotal = current.totalCount + 1
 
-        // 1. Timing: TAP orqali qo'shiladigan sof faol vaqtni hisoblash
-        val deltaMs = timingManager.onDhikrTap()
-        val currentActiveTime = current.totalActiveTimeMillis + deltaMs
-        val newSessionTime = _sessionActiveTimeMillis.value + deltaMs
-        _sessionActiveTimeMillis.value = newSessionTime
+        // 2. Ushbu zikrga tegishli alohida timing menejer orqali hisoblash
+        val manager = getOrCreateTimingManager(current)
+        val (deltaMs, newlyCalibrated) = manager.onDhikrTap()
+        val newActiveTime = current.totalActiveTimeMillis + deltaMs
         _isTimingPaused.value = false
 
-        // 2. In-Memory holatni darhol (0ms kechikishsiz) yangilaymiz
-        updateMemoryCount(current.id, newCount, newTotal, currentActiveTime)
+        if (newlyCalibrated) {
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.updateDhikrCalibration(current.id, true, manager.normalIntervalMs)
+            }
+        }
 
-        // 3. Taktil va ovozli aloqa (UI threadni to'xtatmaslik uchun)
+        // 3. In-Memory holatni darhol (0ms kechikishsiz) yangilaymiz
+        updateMemoryCount(current.id, newCount, newTotal, newActiveTime)
+
+        // 4. Taktil va ovozli aloqa
         val isTargetReached = current.targetCount > 0 && newCount == current.targetCount
         triggerHapticAndSound(uiState.value.settings, isTargetReached)
 
-        // 4. Diskka (DataStore'ga) asinxron debounced yozish
-        scheduleDebouncedSave(current.id, newCount, newTotal, currentActiveTime)
+        // 5. Maqsad yakunlanganda zudlik bilan diskka commit qilish
+        if (isTargetReached) {
+            flushPendingSave()
+        } else {
+            // Xavfsiz periodic/debounced persistence
+            tapCounterSinceLastFlush++
+            if (tapCounterSinceLastFlush >= 15) {
+                flushPendingSave()
+                tapCounterSinceLastFlush = 0
+            } else {
+                scheduleDebouncedSave(current.id, newCount, newTotal, newActiveTime)
+            }
+        }
 
-        // 5. Pauza monitoringi (agar foydalanuvchi uzoq bosmasa pauza holatiga o'tkazish)
-        startPauseWatcher()
+        // 6. Pauza monitoringi
+        startPauseWatcher(current.id)
+    }
+
+    fun dismissCalibrationDialog() {
+        _dialogState.value = _dialogState.value.copy(isCalibrationDialogOpen = false)
     }
 
     /**
@@ -176,10 +211,9 @@ class TasbihViewModel(
         val current = uiState.value.currentDhikr ?: return
         flushPendingSave()
 
-        timingManager.reset()
-        _sessionActiveTimeMillis.value = 0L
+        timingManagers[current.id]?.reset()
         _isTimingPaused.value = true
-        timerTickerJob?.cancel()
+        pauseWatcherJob?.cancel()
 
         updateMemoryCount(current.id, 0, current.totalCount, 0L)
         triggerHaptic(VibrationLevel.LIGHT)
@@ -202,7 +236,12 @@ class TasbihViewModel(
     }
 
     fun selectDhikr(id: String) {
+        // Oldingi zikrning barcha faol vaqt va sanog'ini darhol xavfsiz commit qilish
         flushPendingSave()
+        timingManagers.values.forEach { it.pauseTiming() }
+        _isTimingPaused.value = true
+        pauseWatcherJob?.cancel()
+
         viewModelScope.launch {
             repository.selectDhikr(id)
             setDhikrSheetOpen(false)
@@ -220,6 +259,7 @@ class TasbihViewModel(
 
     fun deleteCustomDhikr(id: String) {
         flushPendingSave()
+        timingManagers.remove(id)
         viewModelScope.launch {
             repository.deleteCustomDhikr(id)
         }
@@ -248,19 +288,21 @@ class TasbihViewModel(
     }
 
     fun onAppBackgrounded() {
-        timingManager.pauseTiming()
+        timingManagers.values.forEach { it.pauseTiming() }
         _isTimingPaused.value = true
-        timerTickerJob?.cancel()
+        pauseWatcherJob?.cancel()
         flushPendingSave()
     }
 
-    private fun startPauseWatcher() {
-        timerTickerJob?.cancel()
-        timerTickerJob = viewModelScope.launch {
+    private fun startPauseWatcher(dhikrId: String) {
+        pauseWatcherJob?.cancel()
+        pauseWatcherJob = viewModelScope.launch {
             while (!_isTimingPaused.value) {
                 delay(1000)
-                if (timingManager.isPaused()) {
+                val manager = timingManagers[dhikrId]
+                if (manager != null && manager.isPaused()) {
                     _isTimingPaused.value = true
+                    flushPendingSave()
                     break
                 }
             }
@@ -350,7 +392,8 @@ class TasbihViewModel(
         val isDhikrSheetOpen: Boolean,
         val isSettingsSheetOpen: Boolean,
         val isAddDhikrDialogOpen: Boolean,
-        val isEditTargetDialogOpen: Boolean
+        val isEditTargetDialogOpen: Boolean,
+        val isCalibrationDialogOpen: Boolean
     )
 
     companion object {
