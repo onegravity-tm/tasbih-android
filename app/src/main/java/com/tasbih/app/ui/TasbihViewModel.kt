@@ -145,15 +145,18 @@ class TasbihViewModel(
     private fun getOrCreateTimingManager(dhikr: DhikrItem): DhikrTimingManager {
         val existing = timingManagers[dhikr.id]
         if (existing != null) {
-            if (dhikr.isCalibrated && !existing.isCalibrated) {
-                existing.syncFromSavedState(dhikr.isCalibrated, dhikr.normalIntervalMs)
-            }
+            existing.syncFromSavedState(
+                savedIsCalibrated = dhikr.isCalibrated,
+                savedNormalIntervalMs = dhikr.normalIntervalMs,
+                savedPeriodStartMillis = dhikr.learningPeriodStartMillis
+            )
             return existing
         }
         val newManager = DhikrTimingManager(
             dhikrId = dhikr.id,
             initialIsCalibrated = dhikr.isCalibrated,
-            initialNormalIntervalMs = dhikr.normalIntervalMs
+            initialNormalIntervalMs = dhikr.normalIntervalMs,
+            initialLearningPeriodStartMillis = dhikr.learningPeriodStartMillis
         )
         timingManagers[dhikr.id] = newManager
         return newManager
@@ -216,7 +219,12 @@ class TasbihViewModel(
         val manager = timingManagers[dhikrId]
         if (manager != null && manager.isCalibrated) {
             viewModelScope.launch(Dispatchers.IO) {
-                repository.updateDhikrCalibration(dhikrId, true, manager.normalIntervalMs)
+                repository.updateDhikrCalibration(
+                    id = dhikrId,
+                    isCalibrated = true,
+                    normalIntervalMs = manager.normalIntervalMs,
+                    learningPeriodStartMillis = manager.learningPeriodStartMillis
+                )
             }
         }
         activeSessionStartUptime = 0L
@@ -243,7 +251,12 @@ class TasbihViewModel(
         val manager = timingManagers[dhikrId]
         if (manager != null && manager.isCalibrated) {
             viewModelScope.launch(Dispatchers.IO) {
-                repository.updateDhikrCalibration(dhikrId, true, manager.normalIntervalMs)
+                repository.updateDhikrCalibration(
+                    id = dhikrId,
+                    isCalibrated = true,
+                    normalIntervalMs = manager.normalIntervalMs,
+                    learningPeriodStartMillis = manager.learningPeriodStartMillis
+                )
             }
         }
     }
@@ -266,10 +279,11 @@ class TasbihViewModel(
             lastTapUptime = now
             sessionAccumulatedMs = 0L
             _isTimingPaused.value = false
+            manager.checkAndRefresh15DayPeriod(System.currentTimeMillis())
         } else {
             // Davom etayotgan sessiya: intervalni klassifikatsiya qilish
             val interval = now - lastTapUptime
-            val (classification, newlyCalibrated) = manager.classifyAndRecordTap(interval)
+            val (classification, stateChanged) = manager.classifyAndRecordTap(interval, System.currentTimeMillis())
 
             when (classification) {
                 TapClassification.ACTIVE_NORMAL, TapClassification.ACTIVE_BORDERLINE -> {
@@ -286,9 +300,14 @@ class TasbihViewModel(
                 }
             }
 
-            if (newlyCalibrated) {
+            if (stateChanged) {
                 viewModelScope.launch(Dispatchers.IO) {
-                    repository.updateDhikrCalibration(current.id, true, manager.normalIntervalMs)
+                    repository.updateDhikrCalibration(
+                        id = current.id,
+                        isCalibrated = manager.isCalibrated,
+                        normalIntervalMs = manager.normalIntervalMs,
+                        learningPeriodStartMillis = manager.learningPeriodStartMillis
+                    )
                 }
             }
         }

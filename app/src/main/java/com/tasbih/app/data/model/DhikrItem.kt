@@ -20,5 +20,6 @@ data class DhikrItem(
     val totalActiveTimeMillis: Long = 0L,
     val lastActiveTimestamp: Long = 0L,
     val isCalibrated: Boolean = false,
-    val normalIntervalMs: Long = 0L
+    val normalIntervalMs: Long = 0L,
+    val learningPeriodStartMillis: Long = 0L
 )
