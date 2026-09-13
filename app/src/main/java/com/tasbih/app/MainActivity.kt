@@ -120,6 +120,7 @@ class MainActivity : ComponentActivity() {
                     SettingsSheet(
                         settings = uiState.settings,
                         onSettingsChanged = viewModel::updateSettings,
+                        onTestVibration = viewModel::testVibration,
                         onDismiss = { viewModel.setSettingsSheetOpen(false) }
                     )
                 }

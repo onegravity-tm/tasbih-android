@@ -11,16 +11,20 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.tasbih.app.R
 import com.tasbih.app.data.model.AppSettings
 import com.tasbih.app.data.model.VibrationLevel
 
@@ -29,6 +33,7 @@ import com.tasbih.app.data.model.VibrationLevel
 fun SettingsSheet(
     settings: AppSettings,
     onSettingsChanged: (AppSettings) -> Unit,
+    onTestVibration: (Int) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -51,32 +56,79 @@ fun SettingsSheet(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Vibratsiya darajasi
-            Text(
-                text = "Vibratsiya kuchi",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+            // Vibratsiya bo'limi
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .selectableGroup(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(
-                    VibrationLevel.OFF to "O'chiq",
-                    VibrationLevel.LIGHT to "Yengil",
-                    VibrationLevel.MEDIUM to "O'rta",
-                    VibrationLevel.STRONG to "Kuchli"
-                ).forEach { (level, title) ->
-                    FilterChip(
-                        selected = settings.vibrationLevel == level,
-                        onClick = {
-                            onSettingsChanged(settings.copy(vibrationLevel = level))
-                        },
-                        label = { Text(title) }
+                Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                    Text(
+                        text = stringResource(R.string.settings_vibration_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
                     )
+                    Text(
+                        text = stringResource(R.string.settings_vibration_subtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = settings.isVibrationEnabled,
+                    onCheckedChange = { onSettingsChanged(settings.copy(isVibrationEnabled = it)) }
+                )
+            }
+
+            if (settings.isVibrationEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+
+                val levelText = when (settings.vibrationIntensity) {
+                    1 -> stringResource(R.string.settings_vibration_level_1)
+                    2 -> stringResource(R.string.settings_vibration_level_2)
+                    3 -> stringResource(R.string.settings_vibration_level_3)
+                    4 -> stringResource(R.string.settings_vibration_level_4)
+                    else -> stringResource(R.string.settings_vibration_level_5)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_vibration_level_1),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${settings.vibrationIntensity} — $levelText",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_vibration_level_5),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Slider(
+                    value = settings.vibrationIntensity.toFloat(),
+                    onValueChange = { onSettingsChanged(settings.copy(vibrationIntensity = it.toInt())) },
+                    valueRange = 1f..5f,
+                    steps = 3,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                FilledTonalButton(
+                    onClick = { onTestVibration(settings.vibrationIntensity) },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Text(text = stringResource(R.string.settings_vibration_test_button))
                 }
             }
 

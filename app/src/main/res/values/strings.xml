@@ -8,4 +8,14 @@
     <string name="total_count_label">Jami: %1$d</string>
     <string name="reset_button_label">Nolga tushirish</string>
     <string name="target_reached_badge">Maqsadga erishildi! 🎉</string>
+    
+    <!-- Vibratsiya sozlamalari -->
+    <string name="settings_vibration_title">Vibratsiya</string>
+    <string name="settings_vibration_subtitle">Bosish va maqsadga erishish tebranishi</string>
+    <string name="settings_vibration_test_button">Sinab ko‘rish</string>
+    <string name="settings_vibration_level_1">Juda yengil</string>
+    <string name="settings_vibration_level_2">Yengil</string>
+    <string name="settings_vibration_level_3">O‘rta</string>
+    <string name="settings_vibration_level_4">Kuchliroq</string>
+    <string name="settings_vibration_level_5">Maksimal</string>
 </resources>

@@ -348,7 +348,7 @@ class TasbihViewModel(
         val currentActive = current.totalActiveTimeMillis
 
         updateMemoryCount(current.id, newCount, currentTotal, currentActive)
-        triggerHaptic(VibrationLevel.LIGHT)
+        triggerFeedback(1)
         scheduleDebouncedSave(current.id, newCount, currentTotal, currentActive)
     }
 
@@ -368,7 +368,7 @@ class TasbihViewModel(
 
         updateMemoryCount(current.id, 0, current.totalCount, 0L)
         _displayTimeMillis.value = 0L
-        triggerHaptic(VibrationLevel.LIGHT)
+        triggerFeedback(1)
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.resetDhikr(current.id)
@@ -490,43 +490,131 @@ class TasbihViewModel(
         }
     }
 
+    fun testVibration(intensity: Int) {
+        val settings = uiState.value.settings
+        if (!settings.isVibrationEnabled) return
+        performVibration(intensity)
+    }
+
     private fun triggerHapticAndSound(settings: AppSettings, isTargetReached: Boolean) {
-        if (isTargetReached) {
-            triggerHapticDuration(120)
-            if (settings.isSoundEnabled) {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100)
+        if (settings.isVibrationEnabled) {
+            if (isTargetReached) {
+                performTargetCompletionVibration(settings.vibrationIntensity)
+            } else {
+                performVibration(settings.vibrationIntensity)
             }
-        } else {
-            triggerHaptic(settings.vibrationLevel)
-            if (settings.isSoundEnabled) {
+        }
+        if (settings.isSoundEnabled) {
+            if (isTargetReached) {
+                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100)
+            } else {
                 toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 30)
             }
         }
     }
 
-    private fun triggerHaptic(level: VibrationLevel) {
-        val durationMs = when (level) {
-            VibrationLevel.OFF -> return
-            VibrationLevel.LIGHT -> 20L
-            VibrationLevel.MEDIUM -> 40L
-            VibrationLevel.STRONG -> 70L
+    private fun triggerFeedback(intensity: Int = 1) {
+        val settings = uiState.value.settings
+        if (settings.isVibrationEnabled) {
+            performVibration(intensity)
         }
-        triggerHapticDuration(durationMs)
     }
 
-    private fun triggerHapticDuration(durationMs: Long) {
+    private fun getVibrator(): Vibrator? {
+        val context = getApplication<Application>().applicationContext
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+    }
+
+    private fun performVibration(intensity: Int) {
         try {
-            val context = getApplication<Application>().applicationContext
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val vibratorManager = context.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as? VibratorManager
-                vibratorManager?.defaultVibrator?.vibrate(
-                    VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE)
-                )
+            val vibrator = getVibrator() ?: return
+            if (!vibrator.hasVibrator()) return
+
+            val clamped = intensity.coerceIn(1, 5)
+
+            // Duration & Amplitude mapping:
+            // 1: Juda yengil  -> 12ms, amp 60  (fallback: 10ms)
+            // 2: Yengil       -> 16ms, amp 100 (fallback: 20ms)
+            // 3: O'rta        -> 22ms, amp 155 (fallback: 35ms)
+            // 4: Kuchliroq    -> 30ms, amp 205 (fallback: 50ms)
+            // 5: Maksimal     -> 42ms, amp 255 (fallback: 70ms)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (vibrator.hasAmplitudeControl()) {
+                    val duration = when (clamped) {
+                        1 -> 12L
+                        2 -> 16L
+                        3 -> 22L
+                        4 -> 30L
+                        else -> 42L
+                    }
+                    val amplitude = when (clamped) {
+                        1 -> 60
+                        2 -> 100
+                        3 -> 155
+                        4 -> 205
+                        else -> 255
+                    }
+                    vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
+                } else {
+                    val fallbackDuration = when (clamped) {
+                        1 -> 10L
+                        2 -> 20L
+                        3 -> 35L
+                        4 -> 50L
+                        else -> 70L
+                    }
+                    vibrator.vibrate(VibrationEffect.createOneShot(fallbackDuration, VibrationEffect.DEFAULT_AMPLITUDE))
+                }
             } else {
                 @Suppress("DEPRECATION")
-                val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+                val fallbackDuration = when (clamped) {
+                    1 -> 10L
+                    2 -> 20L
+                    3 -> 35L
+                    4 -> 50L
+                    else -> 70L
+                }
                 @Suppress("DEPRECATION")
-                vibrator?.vibrate(durationMs)
+                vibrator.vibrate(fallbackDuration)
+            }
+        } catch (_: Exception) {
+            // Xatolik bermaydi
+        }
+    }
+
+    private fun performTargetCompletionVibration(intensity: Int) {
+        try {
+            val vibrator = getVibrator() ?: return
+            if (!vibrator.hasVibrator()) return
+
+            val clamped = intensity.coerceIn(1, 5)
+            // Uch zarbli ritmik tantana signali:
+            // zarb 40ms -> pauza 50ms -> zarb 40ms -> pauza 50ms -> zarb 120ms
+            val timings = longArrayOf(0, 40, 50, 40, 50, 120)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (vibrator.hasAmplitudeControl()) {
+                    val amp = when (clamped) {
+                        1 -> 80
+                        2 -> 120
+                        3 -> 175
+                        4 -> 220
+                        else -> 255
+                    }
+                    val amplitudes = intArrayOf(0, amp, 0, amp, 0, amp)
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
+                } else {
+                    vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(timings, -1)
             }
         } catch (_: Exception) {
             // Xatolik bermaydi

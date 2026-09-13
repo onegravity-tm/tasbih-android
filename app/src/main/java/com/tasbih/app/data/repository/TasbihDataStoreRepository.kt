@@ -24,6 +24,8 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
     private object PrefKeys {
         val SELECTED_DHIKR_ID = stringPreferencesKey("selected_dhikr_id")
         val VIBRATION_LEVEL = stringPreferencesKey("vibration_level")
+        val VIBRATION_ENABLED = booleanPreferencesKey("vibration_enabled")
+        val VIBRATION_INTENSITY = intPreferencesKey("vibration_intensity")
         val SOUND_ENABLED = booleanPreferencesKey("sound_enabled")
         val VOLUME_BUTTONS_ENABLED = booleanPreferencesKey("volume_buttons_enabled")
         val KEEP_SCREEN_ON = booleanPreferencesKey("keep_screen_on")
@@ -99,14 +101,23 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
     }
 
     override val settingsFlow: Flow<AppSettings> = context.dataStore.data.map { preferences ->
-        val vibString = preferences[PrefKeys.VIBRATION_LEVEL] ?: VibrationLevel.MEDIUM.name
-        val vibLevel = try {
-            VibrationLevel.valueOf(vibString)
-        } catch (_: Exception) {
-            VibrationLevel.MEDIUM
+        val oldVibString = preferences[PrefKeys.VIBRATION_LEVEL]
+        val isVibEnabled = preferences[PrefKeys.VIBRATION_ENABLED] ?: (oldVibString != VibrationLevel.OFF.name)
+        val intensity = preferences[PrefKeys.VIBRATION_INTENSITY] ?: when (oldVibString) {
+            VibrationLevel.LIGHT.name -> 2
+            VibrationLevel.STRONG.name -> 4
+            else -> 3
+        }
+        val vibLevel = when {
+            !isVibEnabled -> VibrationLevel.OFF
+            intensity <= 2 -> VibrationLevel.LIGHT
+            intensity == 3 -> VibrationLevel.MEDIUM
+            else -> VibrationLevel.STRONG
         }
 
         AppSettings(
+            isVibrationEnabled = isVibEnabled,
+            vibrationIntensity = intensity.coerceIn(1, 5),
             vibrationLevel = vibLevel,
             isSoundEnabled = preferences[PrefKeys.SOUND_ENABLED] ?: false,
             isVolumeButtonsEnabled = preferences[PrefKeys.VOLUME_BUTTONS_ENABLED] ?: true,
@@ -273,7 +284,17 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
 
     override suspend fun updateSettings(settings: AppSettings) {
         context.dataStore.edit { preferences ->
-            preferences[PrefKeys.VIBRATION_LEVEL] = settings.vibrationLevel.name
+            preferences[PrefKeys.VIBRATION_ENABLED] = settings.isVibrationEnabled
+            preferences[PrefKeys.VIBRATION_INTENSITY] = settings.vibrationIntensity
+            preferences[PrefKeys.VIBRATION_LEVEL] = if (!settings.isVibrationEnabled) {
+                VibrationLevel.OFF.name
+            } else {
+                when (settings.vibrationIntensity) {
+                    1, 2 -> VibrationLevel.LIGHT.name
+                    3 -> VibrationLevel.MEDIUM.name
+                    else -> VibrationLevel.STRONG.name
+                }
+            }
             preferences[PrefKeys.SOUND_ENABLED] = settings.isSoundEnabled
             preferences[PrefKeys.VOLUME_BUTTONS_ENABLED] = settings.isVolumeButtonsEnabled
             preferences[PrefKeys.KEEP_SCREEN_ON] = settings.isKeepScreenOn
