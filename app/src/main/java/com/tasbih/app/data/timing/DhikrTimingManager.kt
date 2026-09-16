@@ -159,6 +159,13 @@ class DhikrTimingManager(
         }
     }
 
+    fun relearnRhythm(now: Long = System.currentTimeMillis()) {
+        recentIntervals.clear()
+        isCalibrated = false
+        normalIntervalMs = 0L
+        learningPeriodStartMillis = now
+    }
+
     fun reset() {
         recentIntervals.clear()
         isCalibrated = false

@@ -226,11 +226,14 @@ class TasbihDataStoreRepository(private val context: Context) : TasbihRepository
     override suspend fun resetDhikr(id: String) {
         context.dataStore.edit { preferences ->
             preferences[PrefKeys.countKey(id)] = 0
-            preferences[PrefKeys.lastTapKey(id)] = 0L
-            preferences[PrefKeys.activeTimeKey(id)] = 0L
+        }
+    }
+
+    override suspend fun relearnDhikrRhythm(id: String) {
+        context.dataStore.edit { preferences ->
             preferences[PrefKeys.isCalibratedKey(id)] = false
             preferences[PrefKeys.normalIntervalKey(id)] = 0L
-            preferences[PrefKeys.learningPeriodStartKey(id)] = 0L
+            preferences[PrefKeys.learningPeriodStartKey(id)] = System.currentTimeMillis()
         }
     }
 

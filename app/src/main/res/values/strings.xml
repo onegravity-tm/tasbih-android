@@ -18,4 +18,10 @@
     <string name="settings_vibration_level_3">O‘rta</string>
     <string name="settings_vibration_level_4">Kuchliroq</string>
     <string name="settings_vibration_level_5">Maksimal</string>
+
+    <!-- Ritm ma'lumotlari -->
+    <string name="timing_rhythm_label">Ritm:</string>
+    <string name="timing_rhythm_learning">O‘rganilmoqda...</string>
+    <string name="timing_rhythm_format">%1$.1fs / TAP</string>
+    <string name="timing_relearn_rhythm_button">Ritmni qayta o‘rganish</string>
 </resources>

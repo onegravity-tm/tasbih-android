@@ -353,26 +353,46 @@ class TasbihViewModel(
     }
 
     /**
-     * Nolga tushirish (Reset)
+     * Nolga tushirish (Reset):
+     * Faqat joriy hisoblagichni (currentCount) 0 ga tushiradi.
+     * Jami vaqt (totalActiveTimeMillis), totalCount va ritm o'rganish xotirasi to'liq saqlanadi!
      */
     fun onResetClick() {
         val current = uiState.value.currentDhikr ?: return
+        // Agar ochiq sessiya bo'lsa, ungacha bo'lgan vaqtni saqlaymiz
+        commitSessionTime(current.id)
         flushPendingSave()
 
-        timingManagers[current.id]?.reset()
         _isTimingPaused.value = true
         activeSessionDhikrId = null
         activeSessionStartUptime = 0L
         lastTapUptime = 0L
         sessionAccumulatedMs = 0L
 
-        updateMemoryCount(current.id, 0, current.totalCount, 0L)
-        _displayTimeMillis.value = 0L
+        // Jami vaqt (totalActiveTimeMillis) va jami hisob saqlanadi, faqat currentCount = 0
+        updateMemoryCount(current.id, 0, current.totalCount, current.totalActiveTimeMillis)
+        _displayTimeMillis.value = current.totalActiveTimeMillis
         triggerFeedback(1)
 
         viewModelScope.launch(Dispatchers.IO) {
             repository.resetDhikr(current.id)
         }
+    }
+
+    /**
+     * Foydalanuvchi qo'lda tanlangan zikrning ritmini qayta o'rganishni boshlashi.
+     * Jami vaqt, hisob va tarix saqlanadi; faqat ritm statistikasi yangidan o'rganiladi.
+     */
+    fun onRelearnRhythmClick() {
+        val current = uiState.value.currentDhikr ?: return
+        val manager = timingManagers[current.id]
+        val now = System.currentTimeMillis()
+        manager?.relearnRhythm(now)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.relearnDhikrRhythm(current.id)
+        }
+        triggerFeedback(1)
     }
 
     /**
@@ -538,47 +558,48 @@ class TasbihViewModel(
 
             val clamped = intensity.coerceIn(1, 5)
 
-            // Duration & Amplitude mapping:
-            // 1: Juda yengil  -> 12ms, amp 60  (fallback: 10ms)
-            // 2: Yengil       -> 16ms, amp 100 (fallback: 20ms)
-            // 3: O'rta        -> 22ms, amp 155 (fallback: 35ms)
-            // 4: Kuchliroq    -> 30ms, amp 205 (fallback: 50ms)
-            // 5: Maksimal     -> 42ms, amp 255 (fallback: 70ms)
+            // Yangi kuchaytirilgan Duration & Amplitude mapping:
+            // Level 1 real qurilmada ham aniq seziladi (eski Level 3 darajasidan boshlanadi)
+            // 1: Juda yengil -> 22ms, amp 150 (fallback: 35ms)
+            // 2: Yengil      -> 28ms, amp 175 (fallback: 45ms)
+            // 3: O'rta       -> 36ms, amp 205 (fallback: 58ms)
+            // 4: Kuchliroq   -> 46ms, amp 230 (fallback: 72ms)
+            // 5: Maksimal    -> 60ms, amp 255 (fallback: 90ms)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (vibrator.hasAmplitudeControl()) {
                     val duration = when (clamped) {
-                        1 -> 12L
-                        2 -> 16L
-                        3 -> 22L
-                        4 -> 30L
-                        else -> 42L
+                        1 -> 22L
+                        2 -> 28L
+                        3 -> 36L
+                        4 -> 46L
+                        else -> 60L
                     }
                     val amplitude = when (clamped) {
-                        1 -> 60
-                        2 -> 100
-                        3 -> 155
-                        4 -> 205
+                        1 -> 150
+                        2 -> 175
+                        3 -> 205
+                        4 -> 230
                         else -> 255
                     }
                     vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
                 } else {
                     val fallbackDuration = when (clamped) {
-                        1 -> 10L
-                        2 -> 20L
-                        3 -> 35L
-                        4 -> 50L
-                        else -> 70L
+                        1 -> 35L
+                        2 -> 45L
+                        3 -> 58L
+                        4 -> 72L
+                        else -> 90L
                     }
                     vibrator.vibrate(VibrationEffect.createOneShot(fallbackDuration, VibrationEffect.DEFAULT_AMPLITUDE))
                 }
             } else {
                 @Suppress("DEPRECATION")
                 val fallbackDuration = when (clamped) {
-                    1 -> 10L
-                    2 -> 20L
-                    3 -> 35L
-                    4 -> 50L
-                    else -> 70L
+                    1 -> 35L
+                    2 -> 45L
+                    3 -> 58L
+                    4 -> 72L
+                    else -> 90L
                 }
                 @Suppress("DEPRECATION")
                 vibrator.vibrate(fallbackDuration)
@@ -594,20 +615,20 @@ class TasbihViewModel(
             if (!vibrator.hasVibrator()) return
 
             val clamped = intensity.coerceIn(1, 5)
-            // Uch zarbli ritmik tantana signali:
-            // zarb 40ms -> pauza 50ms -> zarb 40ms -> pauza 50ms -> zarb 120ms
-            val timings = longArrayOf(0, 40, 50, 40, 50, 120)
+            // Bir nechta pulse + meaningful pause'dan iborat tantanali ritmik naqsh:
+            // zarb 50ms -> pauza 60ms -> zarb 50ms -> pauza 60ms -> zarb 80ms -> pauza 80ms -> cho'ziq zarb 200ms
+            val timings = longArrayOf(0, 50, 60, 50, 60, 80, 80, 200)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (vibrator.hasAmplitudeControl()) {
                     val amp = when (clamped) {
-                        1 -> 80
-                        2 -> 120
-                        3 -> 175
-                        4 -> 220
+                        1 -> 160
+                        2 -> 185
+                        3 -> 210
+                        4 -> 235
                         else -> 255
                     }
-                    val amplitudes = intArrayOf(0, amp, 0, amp, 0, amp)
+                    val amplitudes = intArrayOf(0, amp, 0, amp, 0, amp, 0, amp)
                     vibrator.vibrate(VibrationEffect.createWaveform(timings, amplitudes, -1))
                 } else {
                     vibrator.vibrate(VibrationEffect.createWaveform(timings, -1))

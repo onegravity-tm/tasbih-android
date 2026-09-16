@@ -98,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     uiState = uiState,
                     onCounterClick = viewModel::onCounterClick,
                     onResetClick = viewModel::onResetClick,
+                    onRelearnRhythmClick = viewModel::onRelearnRhythmClick,
                     onOpenDhikrSheet = { viewModel.setDhikrSheetOpen(true) },
                     onOpenSettingsSheet = { viewModel.setSettingsSheetOpen(true) },
                     onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
@@ -177,6 +178,7 @@ fun TasbihApp(
     uiState: TasbihUiState,
     onCounterClick: () -> Unit,
     onResetClick: () -> Unit,
+    onRelearnRhythmClick: () -> Unit,
     onOpenDhikrSheet: () -> Unit,
     onOpenSettingsSheet: () -> Unit,
     onEditTargetClick: () -> Unit
@@ -388,43 +390,80 @@ fun TasbihApp(
                     }
                 }
 
-                // 3-Faza: Zikr Timing ko'rsatkichi — Har bir zikrning "Jami vaqti" (Variant A floor formatlash)
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                // 3-Faza & 4-Faza: Zikr Timing va Ritm ko'rsatkichlari (Har bir zikr uchun 100% mustaqil)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(top = 8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                    // Jami vaqt
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                     ) {
-                        // Kichik holat nuqtasi (yashil = faol, kulrang = pauza)
-                        Box(
-                            modifier = Modifier
-                                .size(7.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (!uiState.isTimingPaused) {
-                                        Color(0xFF4CAF50) // Yashil (Active)
-                                    } else {
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) // Kulrang (Paused)
-                                    }
-                                )
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "${stringResource(id = R.string.timing_total_time_label)} ${uiState.formattedTotalTime}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
-                        )
-                        if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) {
-                            Text(
-                                text = " ${stringResource(id = R.string.timing_paused_label)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.padding(start = 2.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
+                        ) {
+                            // Kichik holat nuqtasi (yashil = faol, kulrang = pauza)
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (!uiState.isTimingPaused) {
+                                            Color(0xFF4CAF50) // Yashil (Active)
+                                        } else {
+                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) // Kulrang (Paused)
+                                        }
+                                    )
                             )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${stringResource(id = R.string.timing_total_time_label)} ${uiState.formattedTotalTime}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
+                            )
+                            if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) {
+                                Text(
+                                    text = " ${stringResource(id = R.string.timing_paused_label)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.outline,
+                                    modifier = Modifier.padding(start = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Ritm ko'rsatkichi va "Ritmni qayta o'rganish" tugmasi
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "${stringResource(id = R.string.timing_rhythm_label)} ${uiState.formattedRhythm}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            IconButton(
+                                onClick = onRelearnRhythmClick,
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = stringResource(id = R.string.timing_relearn_rhythm_button),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
                 }

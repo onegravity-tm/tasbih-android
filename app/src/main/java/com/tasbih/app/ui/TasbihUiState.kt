@@ -40,9 +40,19 @@ data class TasbihUiState(
             val seconds = totalSeconds % 60
 
             return when {
-                hours > 0 -> "${hours}s ${minutes}m ${seconds}s"
+                hours > 0 -> "${hours}h ${minutes}m ${seconds}s"
                 minutes > 0 -> "${minutes}m ${seconds}s"
                 else -> "${seconds}s"
             }
+        }
+
+    val formattedRhythm: String
+        get() {
+            val dhikr = currentDhikr ?: return ""
+            if (!dhikr.isCalibrated || dhikr.normalIntervalMs <= 0L) {
+                return "O‘rganilmoqda..."
+            }
+            val seconds = dhikr.normalIntervalMs / 1000.0
+            return String.format(java.util.Locale.US, "%.1fs / TAP", seconds)
         }
 }
