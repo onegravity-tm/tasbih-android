@@ -57,6 +57,7 @@ class TasbihViewModel(
     private val timingManagers = mutableMapOf<String, DhikrTimingManager>()
     private val _isTimingPaused = MutableStateFlow(true)
     private val _displayTimeMillis = MutableStateFlow(0L)
+    private val _isTargetReachedState = MutableStateFlow(false)
 
     // Active session timing parametrlari (monotonic clock asosida)
     private var activeSessionDhikrId: String? = null
@@ -81,7 +82,8 @@ class TasbihViewModel(
         _inMemoryCounts,
         _dialogState,
         _isTimingPaused,
-        _displayTimeMillis
+        _displayTimeMillis,
+        _isTargetReachedState
     ) { args: Array<Any?> ->
         @Suppress("UNCHECKED_CAST")
         val repoDhikrs = args[0] as List<DhikrItem>
@@ -93,6 +95,7 @@ class TasbihViewModel(
         val dialogs = args[5] as DialogState
         val isPaused = args[6] as Boolean
         val displayTime = args[7] as Long
+        val targetReached = args[8] as Boolean
 
         val selectedId = overrideId ?: repoSelectedId
 
@@ -111,13 +114,12 @@ class TasbihViewModel(
         }
 
         val current = mergedDhikrs.find { it.id == selectedId } ?: mergedDhikrs.firstOrNull()
-        val isTargetReached = current != null && current.targetCount > 0 && current.currentCount >= current.targetCount
 
         TasbihUiState(
             dhikrList = mergedDhikrs,
             currentDhikr = current,
             settings = settings,
-            isTargetReached = isTargetReached,
+            isTargetReached = targetReached,
             isDhikrSheetOpen = dialogs.isDhikrSheetOpen,
             isSettingsSheetOpen = dialogs.isSettingsSheetOpen,
             isAddDhikrDialogOpen = dialogs.isAddDhikrDialogOpen,
@@ -269,8 +271,11 @@ class TasbihViewModel(
         val now = SystemClock.elapsedRealtime()
         val manager = getOrCreateTimingManager(current)
 
-        val newCount = current.currentCount + 1
+        val rawNewCount = current.currentCount + 1
         val newTotal = current.totalCount + 1
+        val isTargetReached = current.targetCount > 0 && rawNewCount >= current.targetCount
+
+        _isTargetReachedState.value = isTargetReached
 
         if (_isTimingPaused.value || activeSessionDhikrId != current.id || lastTapUptime <= 0L) {
             // RESUME yoki BIRINCHI TAP:
@@ -312,18 +317,47 @@ class TasbihViewModel(
             }
         }
 
-        // In-Memory holatni darhol yangilaymiz (0ms UI latency)
-        updateMemoryCount(current.id, newCount, newTotal, current.totalActiveTimeMillis)
-
-        // Taktil va ovozli aloqa
-        val isTargetReached = current.targetCount > 0 && newCount == current.targetCount
+        // Taktil va ovozli aloqa (Target bo'lsa uzunroq tantana tebranishi)
         triggerHapticAndSound(uiState.value.settings, isTargetReached)
 
-        // Maqsad yakunlanganda zudlik bilan diskka commit qilish
         if (isTargetReached) {
-            commitSessionTime(current.id)
+            // MAQSADGA YETILDI:
+            // 1. Joriy faol sessiyadagi barcha vaqtni to'liq commit qilamiz
+            val sessionDuration = if (activeSessionStartUptime > 0L && now >= activeSessionStartUptime) {
+                now - activeSessionStartUptime
+            } else 0L
+            val newActiveTime = current.totalActiveTimeMillis + sessionAccumulatedMs + sessionDuration
+
+            // 2. Timerni DARHOL to'xtatamiz va muzlatamiz (keyingi TAPgacha yurmaydi)
+            _isTimingPaused.value = true
+            activeSessionDhikrId = null
+            activeSessionStartUptime = 0L
+            lastTapUptime = 0L
+            sessionAccumulatedMs = 0L
+            _displayTimeMillis.value = newActiveTime
+
+            // 3. Counter 0 ga tushadi, lekin totalCount va totalActiveTimeMillis to'liq saqlanadi!
+            updateMemoryCount(current.id, 0, newTotal, newActiveTime)
+
+            // 4. Diskka darhol saqlash
+            viewModelScope.launch(Dispatchers.IO) {
+                repository.saveDhikrCounts(current.id, 0, newTotal, System.currentTimeMillis(), newActiveTime)
+            }
+            if (manager.isCalibrated) {
+                viewModelScope.launch(Dispatchers.IO) {
+                    repository.updateDhikrCalibration(
+                        id = current.id,
+                        isCalibrated = true,
+                        normalIntervalMs = manager.normalIntervalMs,
+                        learningPeriodStartMillis = manager.learningPeriodStartMillis
+                    )
+                }
+            }
             flushPendingSave()
         } else {
+            // Oddiy TAP: hisoblagich 1 ga oshadi
+            updateMemoryCount(current.id, rawNewCount, newTotal, current.totalActiveTimeMillis)
+
             // Xavfsiz periodic/debounced persistence
             tapCounterSinceLastFlush++
             if (tapCounterSinceLastFlush >= 15) {
@@ -331,7 +365,7 @@ class TasbihViewModel(
                 flushPendingSave()
                 tapCounterSinceLastFlush = 0
             } else {
-                scheduleDebouncedSave(current.id, newCount, newTotal, current.totalActiveTimeMillis)
+                scheduleDebouncedSave(current.id, rawNewCount, newTotal, current.totalActiveTimeMillis)
             }
         }
     }
@@ -364,6 +398,7 @@ class TasbihViewModel(
         flushPendingSave()
 
         _isTimingPaused.value = true
+        _isTargetReachedState.value = false
         activeSessionDhikrId = null
         activeSessionStartUptime = 0L
         lastTapUptime = 0L
@@ -418,6 +453,7 @@ class TasbihViewModel(
         // 0ms ichida UI va timing state yangi zikrga o'tadi
         _selectedDhikrIdOverride.value = id
         _isTimingPaused.value = true
+        _isTargetReachedState.value = false
         activeSessionDhikrId = null
         activeSessionStartUptime = 0L
         lastTapUptime = 0L
