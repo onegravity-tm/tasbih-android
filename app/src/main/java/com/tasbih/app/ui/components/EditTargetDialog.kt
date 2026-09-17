@@ -20,8 +20,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.tasbih.app.R
 
 @Composable
 fun EditTargetDialog(
@@ -35,11 +37,11 @@ fun EditTargetDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Maqsadni tahrirlash") },
+        title = { Text(text = stringResource(R.string.dialog_edit_target_title)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "$dhikrName uchun yangi maqsadli sonni belgilang:",
+                    text = stringResource(R.string.dialog_edit_target_desc, dhikrName),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -47,7 +49,7 @@ fun EditTargetDialog(
                 OutlinedTextField(
                     value = targetText,
                     onValueChange = { targetText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Maqsadli son (0 = Cheksiz)") },
+                    label = { Text(stringResource(R.string.dialog_edit_target_field_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -56,7 +58,7 @@ fun EditTargetDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Tezkor tanlov:",
+                    text = stringResource(R.string.dialog_edit_target_presets_label),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -84,12 +86,12 @@ fun EditTargetDialog(
                     onConfirm(newTarget)
                 }
             ) {
-                Text("Saqlash")
+                Text(stringResource(R.string.action_save))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Bekor qilish")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )

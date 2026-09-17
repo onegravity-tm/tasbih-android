@@ -15,8 +15,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.tasbih.app.R
 
 @Composable
 fun AddDhikrDialog(
@@ -30,7 +32,7 @@ fun AddDhikrDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Yangi zikr qo'shish") },
+        title = { Text(text = stringResource(R.string.dialog_add_dhikr_title)) },
         text = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 OutlinedTextField(
@@ -39,7 +41,7 @@ fun AddDhikrDialog(
                         name = it
                         if (isError) isError = false
                     },
-                    label = { Text("Zikr nomi (majburiy)") },
+                    label = { Text(stringResource(R.string.dialog_add_dhikr_name_label)) },
                     singleLine = true,
                     isError = isError && name.isBlank(),
                     modifier = Modifier.fillMaxWidth()
@@ -50,7 +52,7 @@ fun AddDhikrDialog(
                 OutlinedTextField(
                     value = arabicText,
                     onValueChange = { arabicText = it },
-                    label = { Text("Arabcha matni (ixtiyoriy)") },
+                    label = { Text(stringResource(R.string.dialog_add_dhikr_arabic_label)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -60,7 +62,7 @@ fun AddDhikrDialog(
                 OutlinedTextField(
                     value = targetText,
                     onValueChange = { targetText = it.filter { ch -> ch.isDigit() } },
-                    label = { Text("Maqsadli son (0 = Cheksiz)") },
+                    label = { Text(stringResource(R.string.dialog_add_dhikr_target_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
@@ -78,12 +80,12 @@ fun AddDhikrDialog(
                     }
                 }
             ) {
-                Text("Qo'shish")
+                Text(stringResource(R.string.action_add))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Bekor qilish")
+                Text(stringResource(R.string.action_cancel))
             }
         }
     )

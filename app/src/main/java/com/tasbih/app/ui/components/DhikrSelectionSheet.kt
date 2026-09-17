@@ -1,6 +1,5 @@
 package com.tasbih.app.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -31,9 +30,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.tasbih.app.R
 import com.tasbih.app.data.model.DhikrItem
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,7 +51,8 @@ fun DhikrSelectionSheet(
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        sheetState = sheetState
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
         Column(
             modifier = Modifier
@@ -63,9 +65,10 @@ fun DhikrSelectionSheet(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Zikrlarni tanlang",
+                    text = stringResource(R.string.dhikr_sheet_title),
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
                 Button(
@@ -74,11 +77,14 @@ fun DhikrSelectionSheet(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "Qo'shish",
+                        contentDescription = stringResource(R.string.cd_add_dhikr),
                         modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.size(4.dp))
-                    Text("Yangi zikr")
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text(
+                        text = stringResource(R.string.dhikr_sheet_add_button),
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             }
 
@@ -88,7 +94,7 @@ fun DhikrSelectionSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(dhikrList, key = { it.id }) { item ->
                     val isSelected = item.id == selectedId
@@ -96,7 +102,7 @@ fun DhikrSelectionSheet(
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(RoundedCornerShape(16.dp))
                             .clickable { onSelect(item.id) },
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) {
@@ -105,7 +111,7 @@ fun DhikrSelectionSheet(
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             }
                         ),
-                        shape = RoundedCornerShape(14.dp)
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Row(
                             modifier = Modifier
@@ -118,19 +124,25 @@ fun DhikrSelectionSheet(
                                 Text(
                                     text = item.name,
                                     style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = if (isSelected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    }
                                 )
                                 if (item.arabicText.isNotBlank()) {
                                     Text(
                                         text = item.arabicText,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         color = MaterialTheme.colorScheme.primary,
-                                        fontSize = 16.sp,
+                                        fontSize = 18.sp,
                                         modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }
+                                val targetStr = if (item.targetCount > 0) item.targetCount.toString() else "∞"
                                 Text(
-                                    text = "Joriy: ${item.currentCount} / ${if (item.targetCount > 0) item.targetCount else "∞"}  •  Jami: ${item.totalCount}",
+                                    text = "${stringResource(R.string.dhikr_item_current_label, item.currentCount, targetStr)}  •  ${stringResource(R.string.dhikr_item_total_summary, item.totalCount)}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(top = 4.dp)
@@ -141,12 +153,13 @@ fun DhikrSelectionSheet(
                                 if (item.isCustom) {
                                     IconButton(
                                         onClick = { onDeleteCustom(item.id) },
-                                        modifier = Modifier.size(36.dp)
+                                        modifier = Modifier.size(40.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Delete,
-                                            contentDescription = "O'chirish",
-                                            tint = MaterialTheme.colorScheme.error
+                                            contentDescription = stringResource(R.string.cd_delete_dhikr),
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
                                 }
@@ -154,7 +167,7 @@ fun DhikrSelectionSheet(
                                 if (isSelected) {
                                     Icon(
                                         imageVector = Icons.Default.Check,
-                                        contentDescription = "Tanlangan",
+                                        contentDescription = stringResource(R.string.cd_selected),
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.padding(start = 8.dp)
                                     )

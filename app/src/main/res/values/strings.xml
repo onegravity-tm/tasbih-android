@@ -1,15 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Tasbih</string>
+    <string name="no_dhikr_selected">Zikr tanlanmagan</string>
     <string name="timing_total_time_label">Jami vaqt:</string>
     <string name="timing_paused_label">(pauza)</string>
     <string name="target_label">Maqsad: %1$d</string>
+    <string name="target_button_label">Maqsad</string>
     <string name="free_dhikr_label">Erkin zikr</string>
     <string name="total_count_label">Jami: %1$d</string>
     <string name="reset_button_label">Nolga tushirish</string>
     <string name="target_reached_badge">Maqsadga erishildi! 🎉</string>
     
+    <!-- Content descriptions -->
+    <string name="cd_dhikr_list">Zikrlar ro‘yxati</string>
+    <string name="cd_settings">Sozlamalar</string>
+    <string name="cd_edit_target">Maqsadni tahrirlash</string>
+    <string name="cd_reset">Nolga tushirish</string>
+    <string name="cd_add_dhikr">Yangi zikr qo‘shish</string>
+    <string name="cd_delete_dhikr">Zikrni o‘chirish</string>
+    <string name="cd_selected">Tanlangan</string>
+
     <!-- Vibratsiya sozlamalari -->
+    <string name="settings_title">Sozlamalar</string>
+    <string name="settings_section_vibration">Vibratsiya</string>
+    <string name="settings_section_sound_control">Ovoz va boshqaruv</string>
+    <string name="settings_section_display">Ekran</string>
+    
     <string name="settings_vibration_title">Vibratsiya</string>
     <string name="settings_vibration_subtitle">Bosish va maqsadga erishish tebranishi</string>
     <string name="settings_vibration_test_button">Sinab ko‘rish</string>
@@ -19,9 +35,38 @@
     <string name="settings_vibration_level_4">Kuchliroq</string>
     <string name="settings_vibration_level_5">Maksimal</string>
 
-    <!-- Ritm ma'lumotlari -->
+    <!-- Ovoz va boshqaruv sozlamalari -->
+    <string name="settings_sound_title">Tovush signali</string>
+    <string name="settings_sound_subtitle">Har bir bosishda mayin chertish tovushi</string>
+    <string name="settings_volume_buttons_title">Ovoz tugmalari orqali sanash</string>
+    <string name="settings_volume_buttons_subtitle">Faqat ilova ekranda ochiq bo‘lganida ishlaydi</string>
+    <string name="settings_keep_screen_on_title">Ekranni yoqiq tutish</string>
+    <string name="settings_keep_screen_on_subtitle">Zikr paytida telefon ekrani o‘chib qolmaydi</string>
+    <string name="settings_fullscreen_tap_title">To‘liq ekran bosish rejimi</string>
+    <string name="settings_fullscreen_tap_subtitle">Ekranning istalgan joyiga bosganda hisob oshadi</string>
+
+    <!-- Ritm ma\'lumotlari -->
     <string name="timing_rhythm_label">Ritm:</string>
     <string name="timing_rhythm_learning">O‘rganilmoqda...</string>
     <string name="timing_rhythm_format">%1$.1fs / TAP</string>
     <string name="timing_relearn_rhythm_button">Ritmni qayta o‘rganish</string>
+
+    <!-- Zikrlar ro\'yxati -->
+    <string name="dhikr_sheet_title">Zikrlarni tanlang</string>
+    <string name="dhikr_sheet_add_button">Yangi zikr</string>
+    <string name="dhikr_item_current_label">Joriy: %1$d / %2$s</string>
+    <string name="dhikr_item_total_summary">Jami: %1$d</string>
+
+    <!-- Dialoglar -->
+    <string name="dialog_edit_target_title">Maqsadni tahrirlash</string>
+    <string name="dialog_edit_target_desc">%1$s uchun yangi maqsadli sonni belgilang:</string>
+    <string name="dialog_edit_target_field_label">Maqsadli son (0 = Cheksiz)</string>
+    <string name="dialog_edit_target_presets_label">Tezkor tanlov:</string>
+    <string name="dialog_add_dhikr_title">Yangi zikr qo‘shish</string>
+    <string name="dialog_add_dhikr_name_label">Zikr nomi (majburiy)</string>
+    <string name="dialog_add_dhikr_arabic_label">Arabcha matni (ixtiyoriy)</string>
+    <string name="dialog_add_dhikr_target_label">Maqsadli son (0 = Cheksiz)</string>
+    <string name="action_save">Saqlash</string>
+    <string name="action_cancel">Bekor qilish</string>
+    <string name="action_add">Qo‘shish</string>
 </resources>

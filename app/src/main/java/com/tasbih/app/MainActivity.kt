@@ -8,11 +8,16 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,10 +36,11 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,13 +49,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,18 +64,24 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.tasbih.app.ui.TasbihUiState
 import com.tasbih.app.ui.TasbihViewModel
 import com.tasbih.app.ui.components.AddDhikrDialog
 import com.tasbih.app.ui.components.DhikrSelectionSheet
 import com.tasbih.app.ui.components.EditTargetDialog
 import com.tasbih.app.ui.components.SettingsSheet
+import com.tasbih.app.ui.theme.SubtleDangerOutlineDark
+import com.tasbih.app.ui.theme.SubtleDangerOutlineLight
+import com.tasbih.app.ui.theme.SubtleDangerTextDark
+import com.tasbih.app.ui.theme.SubtleDangerTextLight
 import com.tasbih.app.ui.theme.TasbihTheme
 
 class MainActivity : ComponentActivity() {
@@ -184,13 +197,32 @@ fun TasbihApp(
     onEditTargetClick: () -> Unit
 ) {
     val currentDhikr = uiState.currentDhikr
+    val isDark = isSystemInDarkTheme()
+    val resetBorderColor = if (isDark) SubtleDangerOutlineDark else SubtleDangerOutlineLight
+    val resetTextColor = if (isDark) SubtleDangerTextDark else SubtleDangerTextLight
+
+    // Counter TAP scale animatsiyasi: 1.0f -> 0.97f -> 1.0f (~80ms spring-like)
+    var tapAnimTrigger by remember { mutableStateOf(false) }
+    LaunchedEffect(currentDhikr?.currentCount, currentDhikr?.totalCount) {
+        if (currentDhikr != null && currentDhikr.totalCount > 0L) {
+            tapAnimTrigger = true
+            delay(40)
+            tapAnimTrigger = false
+        }
+    }
+    val counterScale by animateFloatAsState(
+        targetValue = if (tapAnimTrigger) 0.97f else 1.0f,
+        animationSpec = tween(durationMillis = 80, easing = FastOutSlowInEasing),
+        label = "counterScale"
+    )
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text = "Tasbih",
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                 },
@@ -198,13 +230,13 @@ fun TasbihApp(
                     IconButton(onClick = onOpenDhikrSheet) {
                         Icon(
                             imageVector = Icons.Default.List,
-                            contentDescription = "Zikrlar ro'yxati"
+                            contentDescription = stringResource(R.string.cd_dhikr_list)
                         )
                     }
                     IconButton(onClick = onOpenSettingsSheet) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Sozlamalar"
+                            contentDescription = stringResource(R.string.cd_settings)
                         )
                     }
                 },
@@ -212,7 +244,8 @@ fun TasbihApp(
                     containerColor = Color.Transparent
                 )
             )
-        }
+        },
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -233,14 +266,16 @@ fun TasbihApp(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Yuqori ma'lumot qismi (Zikr nomi va arabcha yozuvi)
+                // ==========================================
+                // 1. YUQORI QISM: Zikr kartasi va Target Badge
+                // ==========================================
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(top = 8.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Card(
                         shape = RoundedCornerShape(20.dp),
@@ -259,7 +294,7 @@ fun TasbihApp(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = currentDhikr?.name ?: "Zikr tanlanmagan",
+                                text = currentDhikr?.name ?: stringResource(R.string.no_dhikr_selected),
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -279,7 +314,7 @@ fun TasbihApp(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(10.dp))
 
                     AnimatedVisibility(
                         visible = uiState.isTargetReached,
@@ -291,7 +326,7 @@ fun TasbihApp(
                             shape = RoundedCornerShape(12.dp)
                         ) {
                             Text(
-                                text = "Maqsadga erishildi! 🎉",
+                                text = stringResource(R.string.target_reached_badge),
                                 color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 fontWeight = FontWeight.SemiBold,
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -300,7 +335,10 @@ fun TasbihApp(
                     }
                 }
 
-                // Markaziy doira va progress indikatori
+                // ==========================================
+                // 2. MARKAZIY QISM: Counter Doirasi (currentCount / target)
+                // "Jami" counter ichidan chiqarilgan, maksimal toza va sokin
+                // ==========================================
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier.size(280.dp)
@@ -317,18 +355,22 @@ fun TasbihApp(
                         )
                     }
 
-                    // Bosiluvchi hisoblagich doirasi
+                    // Bosiluvchi hisoblagich doirasi (subtle scale animatsiyasi bilan)
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .size(240.dp)
+                            .graphicsLayer {
+                                scaleX = counterScale
+                                scaleY = counterScale
+                            }
                             .shadow(16.dp, CircleShape)
                             .clip(CircleShape)
                             .background(
                                 brush = Brush.radialGradient(
                                     colors = listOf(
                                         MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.85f)
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.88f)
                                     )
                                 )
                             )
@@ -342,153 +384,204 @@ fun TasbihApp(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
+                            // Asosiy sanoq: katta va aniq
                             Text(
                                 text = "${currentDhikr?.currentCount ?: 0}",
-                                fontSize = 76.sp,
+                                fontSize = 72.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color.White
                             )
 
-                            Text(
-                                text = "Jami: ${currentDhikr?.totalCount ?: 0}",
-                                fontSize = 14.sp,
-                                color = Color.White.copy(alpha = 0.75f),
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        }
-                    }
-                }
-
-                // Alohida, kichik va aniq Target Edit control (Counter doirasidan to'liq tashqarida)
-                Surface(
-                    onClick = onEditTargetClick,
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
-                    ) {
-                        Text(
-                            text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
-                                "Maqsad: ${currentDhikr.targetCount}"
-                            } else {
-                                "Erkin zikr"
-                            },
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Maqsadni tahrirlash",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
-                }
-
-                // 3-Faza & 4-Faza: Zikr Timing va Ritm ko'rsatkichlari (Har bir zikr uchun 100% mustaqil)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    // Jami vaqt
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp)
-                        ) {
-                            // Kichik holat nuqtasi (yashil = faol, kulrang = pauza)
-                            Box(
-                                modifier = Modifier
-                                    .size(7.dp)
-                                    .clip(CircleShape)
-                                    .background(
-                                        if (!uiState.isTimingPaused) {
-                                            Color(0xFF4CAF50) // Yashil (Active)
-                                        } else {
-                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) // Kulrang (Paused)
-                                        }
-                                    )
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "${stringResource(id = R.string.timing_total_time_label)} ${uiState.formattedTotalTime}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f)
-                            )
-                            if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) {
+                            // Maqsad ko'rsatkichi: "currentCount / target" formatida
+                            if (currentDhikr != null && currentDhikr.targetCount > 0) {
                                 Text(
-                                    text = " ${stringResource(id = R.string.timing_paused_label)}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.outline,
-                                    modifier = Modifier.padding(start = 2.dp)
+                                    text = "/ ${currentDhikr.targetCount}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White.copy(alpha = 0.75f),
+                                    modifier = Modifier.padding(top = 2.dp)
                                 )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Ritm ko'rsatkichi va "Ritmni qayta o'rganish" tugmasi
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
-                        ) {
-                            Text(
-                                text = "${stringResource(id = R.string.timing_rhythm_label)} ${uiState.formattedRhythm}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            IconButton(
-                                onClick = onRelearnRhythmClick,
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = stringResource(id = R.string.timing_relearn_rhythm_button),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(14.dp)
+                            } else {
+                                Text(
+                                    text = "/ ∞",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White.copy(alpha = 0.65f),
+                                    modifier = Modifier.padding(top = 2.dp)
                                 )
                             }
                         }
                     }
                 }
 
-                // Pastki qism: Nolga tushirish tugmasi
+                // ==========================================
+                // 3. MA'LUMOTLAR BO'LIMI: Jami sanoq, Vaqt va Ritm (bitta uyg'un kartada)
+                // ==========================================
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Yuqori qator: Jami sanoq va Jami vaqt (status nuqtasi bilan)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = stringResource(R.string.total_count_label, currentDhikr?.totalCount ?: 0L),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(
+                                            if (!uiState.isTimingPaused) {
+                                                Color(0xFF4CAF50) // Faol (yashil)
+                                            } else {
+                                                MaterialTheme.colorScheme.outline.copy(alpha = 0.6f) // Pauza (kulrang)
+                                            }
+                                        )
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "${stringResource(R.string.timing_total_time_label)} ${uiState.formattedTotalTime}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) {
+                                    Text(
+                                        text = " ${stringResource(R.string.timing_paused_label)}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.padding(start = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                        // Quyi qator: Ritm va "Ritmni qayta o'rganish" tugmasi
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = stringResource(R.string.timing_rhythm_label),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = uiState.formattedRhythm,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+
+                            Surface(
+                                onClick = onRelearnRhythmClick,
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = stringResource(R.string.timing_relearn_rhythm_button),
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = stringResource(R.string.timing_relearn_rhythm_button),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ==========================================
+                // 4. PASTKI BOSHQARUV: MAQSAD va Nolga tushirish (Secondary Actions)
+                // Counter TAP zonasidan to'liq xavfsiz uzoqlikda
+                // ==========================================
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 16.dp),
-                    horizontalArrangement = Arrangement.Center
+                        .padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // MAQSAD tugmasi (Secondary Action, oson topiluvchi, tasodifiy bosilmaydigan)
+                    OutlinedButton(
+                        onClick = onEditTargetClick,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = stringResource(R.string.cd_edit_target),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (currentDhikr != null && currentDhikr.targetCount > 0) {
+                                stringResource(R.string.target_label, currentDhikr.targetCount)
+                            } else {
+                                stringResource(R.string.free_dhikr_label)
+                            },
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // Nolga tushirish tugmasi (Subtle Danger OutlinedButton)
                     OutlinedButton(
                         onClick = onResetClick,
                         shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.height(48.dp)
+                        border = BorderStroke(1.dp, resetBorderColor),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = resetTextColor
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
-                            contentDescription = "Nolga tushirish",
-                            modifier = Modifier.size(18.dp)
+                            contentDescription = stringResource(R.string.cd_reset),
+                            modifier = Modifier.size(16.dp)
                         )
-                        Spacer(modifier = Modifier.size(8.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Nolga tushirish",
-                            fontWeight = FontWeight.Medium
+                            text = stringResource(R.string.reset_button_label),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
