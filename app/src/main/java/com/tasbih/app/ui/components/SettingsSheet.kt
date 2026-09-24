@@ -1,14 +1,17 @@
 package com.tasbih.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Divider
@@ -16,6 +19,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -29,17 +33,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.PointerInputChange
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tasbih.app.R
 import com.tasbih.app.data.model.AppSettings
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,8 +111,8 @@ fun SettingsSheet(
             if (settings.isVibrationEnabled) {
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Slider value state: faqat slider ichida boshqariladi.
-                // remember(settings.vibrationIntensity) orqali settings o'zgarganda reset bo'ladi.
+                // Mahalliy state — faqat ushbu composable ichida boshqariladi.
+                // settings.vibrationIntensity o'zgarganda reset bo'ladi.
                 var sliderValue by remember(settings.vibrationIntensity) {
                     mutableFloatStateOf(settings.vibrationIntensity.toFloat())
                 }
@@ -150,17 +149,31 @@ fun SettingsSheet(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
+                // =========================================================================
+                // VIBRATION SLIDER — Material3 Slider + Canvas dot overlay
+                //
+                // ROOT CAUSE FIX: Oldingi implementation'da ikki alohida .pointerInput()
+                // bloki bor edi (detectTapGestures + detectHorizontalDragGestures).
+                // Compose'da competitive gesture'lar bo'lganda detectTapGestures
+                // ACTION_DOWN'ni consume qilib oladi va drag hech qachon ishlamaydi.
+                //
+                // YECHIM: Material3 Slider — gesture handling platforma darajasida
+                // battle-tested. 5 ta "magnetic station" uchun dots Canvas orqali
+                // alohida chiziladi, lekin Slider'ning o'z gesture handling'iga tegmaymiz.
+                //
+                // Dot X koordinatasi = Slider ichki track geometriyasi:
+                //   trackPadding = 10.dp (thumb radius default)
+                //   dotX_i = trackPadding + (i/4) * (sliderWidth - 2*trackPadding)
+                // =========================================================================
                 VibrationSlider(
                     value = sliderValue,
                     onValueChange = { newVal ->
-                        // Drag paytida real-time yangilanish
                         sliderValue = newVal
                     },
-                    onValueChangeFinished = { finalVal ->
-                        // Barmoq olinganda: eng yaqin levelga snap + saqlash
-                        val snapped = finalVal.roundToInt().coerceIn(1, 5)
+                    onValueChangeFinished = {
+                        val snapped = sliderValue.roundToInt().coerceIn(1, 5)
                         sliderValue = snapped.toFloat()
                         if (snapped != settings.vibrationIntensity) {
                             onSettingsChanged(settings.copy(vibrationIntensity = snapped))
@@ -169,11 +182,10 @@ fun SettingsSheet(
                     },
                     primaryColor = MaterialTheme.colorScheme.primary,
                     onPrimaryColor = MaterialTheme.colorScheme.onPrimary,
-                    trackInactiveColor = MaterialTheme.colorScheme.surfaceVariant,
                     outlineVariantColor = MaterialTheme.colorScheme.outlineVariant
                 )
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 FilledTonalButton(
                     onClick = { onTestVibration(activeIntensity) },
@@ -254,189 +266,86 @@ fun SettingsSheet(
 }
 
 /**
- * YAGONA pointerInput bloki bilan ishlaydigan custom Vibration Slider.
+ * Vibration Slider — Material3 Slider asosida, 5 ta dot Canvas orqali overlay sifatida.
  *
- * ROOT CAUSE FIX (oldingi versiyada drag ishlamasligining sababi):
- * - Oldingi versiyada detectTapGestures va detectHorizontalDragGestures
- *   IKKI ALOHIDA .pointerInput() blokida edi.
- * - Compose'da bir composable'ga ikki pointerInput qo'yilsa, ular competitive
- *   ishlaydi va detectTapGestures ACTION_DOWN'ni avval consume qiladi,
- *   shuning uchun detectHorizontalDragGestures hech qachon drag eventlarini olmaydi.
+ * Material3 Slider gesture handling'i platforma darajasida ishlaydi va
+ * real qurilmalarda drag/tap 100% ishonchli.
  *
- * YECHIM:
- * - Yagona pointerInput + awaitEachGesture + awaitFirstDown + horizontalDrag
- * - Barcha gesture handling bitta gesture detector ichida.
- * - Tap va Drag bir xil gesture session ichida ajralib chiqadi.
+ * 5 ta "magnetic station" dots vizual maqsadda chiziladi;
+ * snap logikasi onValueChangeFinished'da amalga oshiriladi.
  *
- * PERFORMANCE FIX:
- * - BoxWithConstraints olib tashlandi (qimmat layout pass).
- * - Slider kengligi onSizeChanged bilan o'lchanadi.
- * - onValueChange faqat real qiymat o'zganda chaqiriladi.
- *
- * Geometriya:
- * - R = thumbRadius = 12.dp
- * - L = width - 2*R  (foydali track uzunligi)
- * - Dot i (i=0..4): X_i = R + (i/4) * L
- * - Thumb: X_thumb = R + ((value-1)/4) * L
- * => Level 1..5 da thumb markazi = dot markazi (aynan)
+ * Slider ichki track geometriyasi (M3 default):
+ *   thumbRadius = 10.dp
+ *   trackStart  = thumbRadius
+ *   trackEnd    = sliderWidth - thumbRadius
+ *   dot_i X     = thumbRadius + (i/4) * (sliderWidth - 2*thumbRadius)
  */
 @Composable
 private fun VibrationSlider(
     value: Float,
     onValueChange: (Float) -> Unit,
-    onValueChangeFinished: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit,
     primaryColor: Color,
     onPrimaryColor: Color,
-    trackInactiveColor: Color,
     outlineVariantColor: Color
 ) {
-    // Slider kengligi pixel'da — onSizeChanged bilan lazily o'lchanadi
+    // Slider kengligini o'lchash uchun onGloballyPositioned
     var sliderWidthPx by remember { mutableFloatStateOf(0f) }
-    val thumbRadiusDp = 12.dp
 
-    Canvas(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(48.dp)
-            .onSizeChangedCompat { size ->
-                sliderWidthPx = size.width.toFloat()
-            }
-            .pointerInput(Unit) {
-                // Bir-biriga to'sqinlik qilmaydigan yagona gesture handler.
-                // awaitEachGesture: har bir touch sessiyasini boshidan oxirigacha tutadi.
-                // awaitFirstDown: barmoq tegishini kutadi.
-                // Keyin harakat masofasiga qarab Tap yoki Drag deb belgilaydi.
-                awaitEachGesture {
-                    val thumbRadiusPx = thumbRadiusDp.toPx()
-                    val trackLength = sliderWidthPx - 2f * thumbRadiusPx
-                    if (trackLength <= 0f) return@awaitEachGesture
-
-                    // Barmoq tegishini kutamiz (Initial DOWN event)
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    down.consume()
-
-                    // Barmoq teggan joydan qiymatni hisoblash
-                    fun xToValue(x: Float): Float {
-                        val fraction = ((x - thumbRadiusPx) / trackLength).coerceIn(0f, 1f)
-                        return (1f + fraction * 4f).coerceIn(1f, 5f)
-                    }
-
-                    // DOWN holatida darhol thumb'ni barmoq ostiga ko'chiramiz
-                    val downValue = xToValue(down.position.x)
-                    onValueChange(downValue)
-
-                    var isDragging = false
-                    var lastValue = downValue
-
-                    // Pointer eventslarini kuzatish (UP yoki CANCEL gacha)
-                    while (true) {
-                        val event = awaitPointerEvent(pass = PointerEventPass.Main)
-                        val change = event.changes.firstOrNull() ?: break
-
-                        if (change.pressed) {
-                            // Barmoq harakatda: drag
-                            change.consume()
-                            val newValue = xToValue(change.position.x)
-                            if (newValue != lastValue) {
-                                isDragging = true
-                                lastValue = newValue
-                                onValueChange(newValue)
-                            }
-                        } else {
-                            // Barmoq olingan: release
-                            change.consume()
-                            // Snap to nearest level
-                            val snapped = lastValue.roundToInt().coerceIn(1, 5).toFloat()
-                            if (snapped != lastValue) {
-                                onValueChange(snapped)
-                            }
-                            onValueChangeFinished(snapped)
-                            break
-                        }
-                    }
-                }
+            .onGloballyPositioned { coords ->
+                sliderWidthPx = coords.size.width.toFloat()
             }
     ) {
-        val thumbRadiusPx = thumbRadiusDp.toPx()
-        // sliderWidthPx birinchi recomposition'dan keyin to'ldiriladi,
-        // ammo Canvas size ham mavjud — ikkalasi bir xil bo'lishi kerak.
-        val w = if (sliderWidthPx > 0f) sliderWidthPx else size.width
-        val trackLength = w - 2f * thumbRadiusPx
-        val centerY = size.height / 2f
-        val trackStroke = 6.dp.toPx()
-
-        val clamped = value.coerceIn(1f, 5f)
-        val fraction = (clamped - 1f) / 4f
-        val thumbCenterX = thumbRadiusPx + fraction * trackLength
-        val activeLevel = clamped.roundToInt().coerceIn(1, 5)
-
-        // --- 1. Inaktiv track (butun uzunlik) ---
-        drawLine(
-            color = trackInactiveColor,
-            start = Offset(thumbRadiusPx, centerY),
-            end = Offset(thumbRadiusPx + trackLength, centerY),
-            strokeWidth = trackStroke,
-            cap = StrokeCap.Round
+        // Material3 Slider — barcha gesture handling o'z ichida
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            onValueChangeFinished = onValueChangeFinished,
+            valueRange = 1f..5f,
+            steps = 0, // smooth, continuous drag
+            modifier = Modifier.fillMaxWidth()
         )
 
-        // --- 2. Aktiv track (boshidan thumb gacha) ---
-        if (thumbCenterX > thumbRadiusPx) {
-            drawLine(
-                color = primaryColor,
-                start = Offset(thumbRadiusPx, centerY),
-                end = Offset(thumbCenterX, centerY),
-                strokeWidth = trackStroke,
-                cap = StrokeCap.Round
-            )
-        }
+        // 5 ta dot overlay — faqat vizual, gesture emas
+        if (sliderWidthPx > 0f) {
+            val thumbRadiusDp = 10.dp
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .align(Alignment.Center)
+            ) {
+                val thumbRadiusPx = thumbRadiusDp.toPx()
+                val trackLength = sliderWidthPx - 2f * thumbRadiusPx
+                val centerY = size.height / 2f
+                val clamped = value.coerceIn(1f, 5f)
+                val activeLevel = clamped.roundToInt().coerceIn(1, 5)
 
-        // --- 3. 5 ta station nuqtalari ---
-        for (i in 0..4) {
-            val level = i + 1
-            // Dot X koordinatasi = thumb formula bilan identik → 100% mos
-            val dotX = thumbRadiusPx + (i / 4f) * trackLength
-            val isActive = level == activeLevel
-            val isPassed = level < activeLevel
+                for (i in 0..4) {
+                    val level = i + 1
+                    val dotX = thumbRadiusPx + (i / 4f) * trackLength
+                    val isActive = level == activeLevel
+                    val isPassed = level < activeLevel
 
-            val dotRadius = if (isActive) 4.5.dp.toPx() else 3.dp.toPx()
-            val dotColor = when {
-                isActive -> onPrimaryColor
-                isPassed -> primaryColor.copy(alpha = 0.85f)
-                else -> outlineVariantColor
+                    val dotRadius = if (isActive) 4.dp.toPx() else 2.5.dp.toPx()
+                    val dotColor = when {
+                        isActive -> onPrimaryColor
+                        isPassed -> primaryColor.copy(alpha = 0.7f)
+                        else -> outlineVariantColor
+                    }
+                    drawCircle(
+                        color = dotColor,
+                        radius = dotRadius,
+                        center = Offset(dotX, centerY)
+                    )
+                }
             }
-            drawCircle(color = dotColor, radius = dotRadius, center = Offset(dotX, centerY))
         }
-
-        // --- 4. Thumb ---
-        // Soya
-        drawCircle(
-            color = Color.Black.copy(alpha = 0.20f),
-            radius = thumbRadiusPx + 1.5.dp.toPx(),
-            center = Offset(thumbCenterX, centerY + 1.5.dp.toPx())
-        )
-        // Asosiy doira
-        drawCircle(
-            color = primaryColor,
-            radius = thumbRadiusPx,
-            center = Offset(thumbCenterX, centerY)
-        )
-        // Ichki oq yadro
-        drawCircle(
-            color = onPrimaryColor,
-            radius = 4.dp.toPx(),
-            center = Offset(thumbCenterX, centerY)
-        )
     }
 }
-
-/**
- * Canvas composable'ning o'lchamini olish uchun yordamchi extension.
- * onSizeChanged Layout modifier orqali ishlaydi.
- */
-private fun Modifier.onSizeChangedCompat(onSizeChanged: (androidx.compose.ui.unit.IntSize) -> Unit): Modifier =
-    this.then(
-        androidx.compose.ui.layout.onSizeChanged { size -> onSizeChanged(size) }
-    )
 
 @Composable
 private fun SettingToggleItem(
