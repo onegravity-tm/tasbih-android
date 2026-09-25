@@ -28,17 +28,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.tasbih.app.R
 import com.tasbih.app.data.model.AppSettings
+import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -50,9 +51,28 @@ fun SettingsSheet(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    var isDismissing by remember { mutableStateOf(false) }
+
+    val dismissGracefully: () -> Unit = remember(coroutineScope, sheetState) {
+        {
+            if (!isDismissing) {
+                isDismissing = true
+                coroutineScope.launch {
+                    sheetState.hide()
+                }.invokeOnCompletion {
+                    if (!sheetState.isVisible) {
+                        onDismiss()
+                    }
+                }
+            }
+        }
+    }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            dismissGracefully()
+        },
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface
     ) {
@@ -289,15 +309,8 @@ private fun VibrationSlider(
     onPrimaryColor: Color,
     outlineVariantColor: Color
 ) {
-    // Slider kengligini o'lchash uchun onGloballyPositioned
-    var sliderWidthPx by remember { mutableFloatStateOf(0f) }
-
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { coords ->
-                sliderWidthPx = coords.size.width.toFloat()
-            }
+        modifier = Modifier.fillMaxWidth()
     ) {
         // Material3 Slider — barcha gesture handling o'z ichida
         Slider(
@@ -310,17 +323,17 @@ private fun VibrationSlider(
         )
 
         // 5 ta dot overlay — faqat vizual, gesture emas
-        if (sliderWidthPx > 0f) {
-            val thumbRadiusDp = 10.dp
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .align(Alignment.Center)
-            ) {
-                val thumbRadiusPx = thumbRadiusDp.toPx()
-                val trackLength = sliderWidthPx - 2f * thumbRadiusPx
-                val centerY = size.height / 2f
+        val thumbRadiusDp = 10.dp
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .align(Alignment.Center)
+        ) {
+            val thumbRadiusPx = thumbRadiusDp.toPx()
+            val trackLength = size.width - 2f * thumbRadiusPx
+            if (trackLength <= 0f) return@Canvas
+            val centerY = size.height / 2f
                 val clamped = value.coerceIn(1f, 5f)
                 val activeLevel = clamped.roundToInt().coerceIn(1, 5)
 
@@ -345,7 +358,6 @@ private fun VibrationSlider(
             }
         }
     }
-}
 
 @Composable
 private fun SettingToggleItem(

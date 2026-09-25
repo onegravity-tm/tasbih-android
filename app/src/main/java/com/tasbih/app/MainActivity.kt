@@ -74,8 +74,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
-import com.tasbih.app.ui.TasbihUiState
+import com.tasbih.app.data.model.AppSettings
+import com.tasbih.app.data.model.DhikrItem
 import com.tasbih.app.ui.TasbihViewModel
 import com.tasbih.app.ui.components.AddDhikrDialog
 import com.tasbih.app.ui.components.DhikrSelectionSheet
@@ -86,6 +86,10 @@ import com.tasbih.app.ui.theme.SubtleDangerOutlineLight
 import com.tasbih.app.ui.theme.SubtleDangerTextDark
 import com.tasbih.app.ui.theme.SubtleDangerTextLight
 import com.tasbih.app.ui.theme.TasbihTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 class MainActivity : ComponentActivity() {
 
@@ -99,11 +103,86 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             TasbihTheme {
-                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+                // =========================================================================
+                // PERFORMANCE FIX: 100ms Ticker Recomposition Isolation
+                // uiState ichidagi maydonlar distinctUntilChanged() bilan ajratilgan.
+                // 100ms ticker faqat formattedTotalTimeFlow'ga ta'sir qiladi,
+                // asosiy ekran, medallion va sheetlar ticker sababli keraksiz qayta
+                // compose BO'LMAYDI!
+                // =========================================================================
+
+                val currentDhikr by remember(viewModel) {
+                    viewModel.uiState.map { it.currentDhikr }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = null)
+
+                val settings by remember(viewModel) {
+                    viewModel.uiState.map { it.settings }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = AppSettings())
+
+                val isTargetReached by remember(viewModel) {
+                    viewModel.uiState.map { it.isTargetReached }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = false)
+
+                val isTimingPaused by remember(viewModel) {
+                    viewModel.uiState.map { it.isTimingPaused }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = true)
+
+                val progress by remember(viewModel) {
+                    viewModel.uiState.map { it.progress }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = 0f)
+
+                val formattedRhythm by remember(viewModel) {
+                    viewModel.uiState.map { it.formattedRhythm }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = "")
+
+                val dhikrList by remember(viewModel) {
+                    viewModel.uiState.map { it.dhikrList }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = emptyList())
+
+                val isDhikrSheetOpenState by remember(viewModel) {
+                    viewModel.uiState.map { it.isDhikrSheetOpen }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = false)
+
+                val isSettingsSheetOpenState by remember(viewModel) {
+                    viewModel.uiState.map { it.isSettingsSheetOpen }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = false)
+
+                val isAddDhikrDialogOpen by remember(viewModel) {
+                    viewModel.uiState.map { it.isAddDhikrDialogOpen }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = false)
+
+                val isEditTargetDialogOpen by remember(viewModel) {
+                    viewModel.uiState.map { it.isEditTargetDialogOpen }.distinctUntilChanged()
+                }.collectAsStateWithLifecycle(initialValue = false)
+
+                // Sekundiga ko'pi bilan 1 marta o'zgaruvchi vaqt oqimi
+                val formattedTotalTimeFlow = remember(viewModel) {
+                    viewModel.uiState.map { it.formattedTotalTime }.distinctUntilChanged()
+                }
+
+                // =========================================================================
+                // PERFORMANCE FIX: Silliq Sheet Dismiss (Graceful Animated Dismiss)
+                // ViewModel zikr tanlanganda darhol false qilsa ham, sheet animatsiyasi
+                // to'liq tugamaguncha composition'dan uzilmaydi.
+                // =========================================================================
+                var showDhikrSheet by remember { mutableStateOf(false) }
+                var showSettingsSheet by remember { mutableStateOf(false) }
+
+                LaunchedEffect(isDhikrSheetOpenState) {
+                    if (isDhikrSheetOpenState) {
+                        showDhikrSheet = true
+                    }
+                }
+
+                LaunchedEffect(isSettingsSheetOpenState) {
+                    if (isSettingsSheetOpenState) {
+                        showSettingsSheet = true
+                    }
+                }
 
                 // Ekranni doim yoqiq tutish sozlamasi
-                LaunchedEffect(uiState.settings.isKeepScreenOn) {
-                    if (uiState.settings.isKeepScreenOn) {
+                LaunchedEffect(settings.isKeepScreenOn) {
+                    if (settings.isKeepScreenOn) {
                         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                     } else {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -111,7 +190,13 @@ class MainActivity : ComponentActivity() {
                 }
 
                 TasbihApp(
-                    uiState = uiState,
+                    currentDhikr = currentDhikr,
+                    progress = progress,
+                    isTargetReached = isTargetReached,
+                    isFullScreenTapEnabled = settings.isFullScreenTapEnabled,
+                    isTimingPaused = isTimingPaused,
+                    formattedRhythm = formattedRhythm,
+                    formattedTotalTimeFlow = formattedTotalTimeFlow,
                     onCounterClick = viewModel::onCounterClick,
                     onResetClick = viewModel::onResetClick,
                     onRelearnRhythmClick = viewModel::onRelearnRhythmClick,
@@ -120,30 +205,36 @@ class MainActivity : ComponentActivity() {
                     onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
                 )
 
-                // Zikrlar ro'yxati sheet
-                if (uiState.isDhikrSheetOpen) {
+                // Zikrlar ro'yxati sheet (Graceful dismiss bilan himoyalangan)
+                if (showDhikrSheet) {
                     DhikrSelectionSheet(
-                        dhikrList = uiState.dhikrList,
-                        selectedId = uiState.currentDhikr?.id,
+                        dhikrList = dhikrList,
+                        selectedId = currentDhikr?.id,
                         onSelect = viewModel::selectDhikr,
                         onAddNewClick = { viewModel.setAddDhikrDialogOpen(true) },
                         onDeleteCustom = viewModel::deleteCustomDhikr,
-                        onDismiss = { viewModel.setDhikrSheetOpen(false) }
+                        onDismiss = {
+                            showDhikrSheet = false
+                            viewModel.setDhikrSheetOpen(false)
+                        }
                     )
                 }
 
-                // Sozlamalar sheet
-                if (uiState.isSettingsSheetOpen) {
+                // Sozlamalar sheet (Graceful dismiss bilan himoyalangan)
+                if (showSettingsSheet) {
                     SettingsSheet(
-                        settings = uiState.settings,
+                        settings = settings,
                         onSettingsChanged = viewModel::updateSettings,
                         onTestVibration = viewModel::testVibration,
-                        onDismiss = { viewModel.setSettingsSheetOpen(false) }
+                        onDismiss = {
+                            showSettingsSheet = false
+                            viewModel.setSettingsSheetOpen(false)
+                        }
                     )
                 }
 
                 // Yangi zikr qo'shish dialogi
-                if (uiState.isAddDhikrDialogOpen) {
+                if (isAddDhikrDialogOpen) {
                     AddDhikrDialog(
                         onDismiss = { viewModel.setAddDhikrDialogOpen(false) },
                         onConfirm = viewModel::addCustomDhikr
@@ -151,10 +242,10 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Maqsadni tahrirlash dialogi
-                if (uiState.isEditTargetDialogOpen && uiState.currentDhikr != null) {
+                if (isEditTargetDialogOpen && currentDhikr != null) {
                     EditTargetDialog(
-                        dhikrName = uiState.currentDhikr!!.name,
-                        currentTarget = uiState.currentDhikr!!.targetCount,
+                        dhikrName = currentDhikr!!.name,
+                        currentTarget = currentDhikr!!.targetCount,
                         onDismiss = { viewModel.setEditTargetDialogOpen(false) },
                         onConfirm = viewModel::updateCurrentDhikrTarget
                     )
@@ -175,11 +266,11 @@ class MainActivity : ComponentActivity() {
                 when (event.keyCode) {
                     KeyEvent.KEYCODE_VOLUME_UP -> {
                         viewModel.onCounterClick()
-                        return true // Tizim ovozini o'zgartirmaslik uchun eventni o'zlashtiramiz
+                        return true
                     }
                     KeyEvent.KEYCODE_VOLUME_DOWN -> {
                         viewModel.onCounterDecrement()
-                        return true // Tizim ovozini o'zgartirmaslik uchun eventni o'zlashtiramiz
+                        return true
                     }
                 }
             }
@@ -191,7 +282,13 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasbihApp(
-    uiState: TasbihUiState,
+    currentDhikr: DhikrItem?,
+    progress: Float,
+    isTargetReached: Boolean,
+    isFullScreenTapEnabled: Boolean,
+    isTimingPaused: Boolean,
+    formattedRhythm: String,
+    formattedTotalTimeFlow: Flow<String>,
     onCounterClick: () -> Unit,
     onResetClick: () -> Unit,
     onRelearnRhythmClick: () -> Unit,
@@ -199,7 +296,6 @@ fun TasbihApp(
     onOpenSettingsSheet: () -> Unit,
     onEditTargetClick: () -> Unit
 ) {
-    val currentDhikr = uiState.currentDhikr
     val isDark = isSystemInDarkTheme()
     val resetBorderColor = if (isDark) SubtleDangerOutlineDark else SubtleDangerOutlineLight
     val resetTextColor = if (isDark) SubtleDangerTextDark else SubtleDangerTextLight
@@ -218,6 +314,38 @@ fun TasbihApp(
         animationSpec = tween(durationMillis = 80, easing = FastOutSlowInEasing),
         label = "counterScale"
     )
+
+    // =========================================================================
+    // ALLOCATION OPTIMIZATION: Og'ir chizma obyektlari remember qilinadi
+    // =========================================================================
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val outlineVariantColor = MaterialTheme.colorScheme.outlineVariant
+    val medallionBrush = remember(primaryColor) {
+        Brush.radialGradient(
+            colors = listOf(
+                primaryColor,
+                primaryColor.copy(alpha = 0.90f)
+            )
+        )
+    }
+    val dhikrCardBorder = remember(outlineVariantColor) {
+        BorderStroke(1.dp, outlineVariantColor.copy(alpha = 0.4f))
+    }
+    val statsCardBorder = remember(outlineVariantColor) {
+        BorderStroke(1.dp, outlineVariantColor.copy(alpha = 0.3f))
+    }
+    val resetBtnBorder = remember(resetBorderColor) {
+        BorderStroke(1.dp, resetBorderColor)
+    }
+    val outerRimBorder = remember(primaryColor) {
+        BorderStroke(1.5.dp, primaryColor.copy(alpha = 0.2f))
+    }
+    val medallionBorder = remember(primaryColor) {
+        BorderStroke(1.5.dp, primaryColor.copy(alpha = 0.25f))
+    }
+    val innerRingBorder = remember {
+        BorderStroke(1.dp, Color.White.copy(alpha = 0.14f))
+    }
 
     Scaffold(
         topBar = {
@@ -255,7 +383,7 @@ fun TasbihApp(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .then(
-                    if (uiState.settings.isFullScreenTapEnabled) {
+                    if (isFullScreenTapEnabled) {
                         Modifier.clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
@@ -285,7 +413,7 @@ fun TasbihApp(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
                         ),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
+                        border = dhikrCardBorder,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(16.dp))
@@ -333,7 +461,7 @@ fun TasbihApp(
                     Spacer(modifier = Modifier.height(6.dp))
 
                     AnimatedVisibility(
-                        visible = uiState.isTargetReached,
+                        visible = isTargetReached,
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
@@ -364,11 +492,11 @@ fun TasbihApp(
                     // Yaxlit Progress Rim (Agar target > 0 bo'lsa)
                     if (currentDhikr != null && currentDhikr.targetCount > 0) {
                         CircularProgressIndicator(
-                            progress = { uiState.progress },
+                            progress = { progress },
                             modifier = Modifier.size(256.dp),
                             strokeWidth = 5.dp,
                             trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            color = MaterialTheme.colorScheme.primary,
+                            color = primaryColor,
                             strokeCap = StrokeCap.Round
                         )
                     } else {
@@ -376,10 +504,7 @@ fun TasbihApp(
                         Box(
                             modifier = Modifier
                                 .size(256.dp)
-                                .border(
-                                    BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                                    CircleShape
-                                )
+                                .border(outerRimBorder, CircleShape)
                         )
                     }
 
@@ -392,20 +517,10 @@ fun TasbihApp(
                                 scaleX = counterScale
                                 scaleY = counterScale
                             }
-                            .shadow(12.dp, CircleShape, spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                            .shadow(12.dp, CircleShape, spotColor = primaryColor.copy(alpha = 0.35f))
                             .clip(CircleShape)
-                            .border(
-                                BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
-                                CircleShape
-                            )
-                            .background(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        MaterialTheme.colorScheme.primary,
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.90f)
-                                    )
-                                )
-                            )
+                            .border(medallionBorder, CircleShape)
+                            .background(brush = medallionBrush)
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
@@ -416,10 +531,7 @@ fun TasbihApp(
                         Box(
                             modifier = Modifier
                                 .size(224.dp)
-                                .border(
-                                    BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
-                                    CircleShape
-                                )
+                                .border(innerRingBorder, CircleShape)
                         )
 
                         // Raqamlar va Target ko'rsatkichi
@@ -465,7 +577,7 @@ fun TasbihApp(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                     ),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)),
+                    border = statsCardBorder,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
@@ -504,7 +616,7 @@ fun TasbihApp(
                                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         )
 
-                        // 2. SECONDARY: Faol vaqt
+                        // 2. SECONDARY: Faol vaqt (Faqat ActiveTimeText mustaqil yangilanadi)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1.2f)
@@ -515,13 +627,13 @@ fun TasbihApp(
                                         .size(6.dp)
                                         .clip(CircleShape)
                                         .background(
-                                            if (!uiState.isTimingPaused) Color(0xFF4CAF50)
+                                            if (!isTimingPaused) Color(0xFF4CAF50)
                                             else MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
                                         )
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (uiState.isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) "VAQT (PAUZA)" else "FAOL VAQT",
+                                    text = if (isTimingPaused && (currentDhikr?.totalActiveTimeMillis ?: 0L) > 0L) "VAQT (PAUZA)" else "FAOL VAQT",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                                     fontWeight = FontWeight.Medium,
@@ -529,12 +641,7 @@ fun TasbihApp(
                                 )
                             }
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = uiState.formattedTotalTime,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            ActiveTimeText(formattedTotalTimeFlow)
                         }
 
                         // Ajratuvchi chiziq
@@ -566,17 +673,17 @@ fun TasbihApp(
                                     Icon(
                                         imageVector = Icons.Default.Refresh,
                                         contentDescription = stringResource(R.string.timing_relearn_rhythm_button),
-                                        tint = MaterialTheme.colorScheme.primary,
+                                        tint = primaryColor,
                                         modifier = Modifier.size(13.dp)
                                     )
                                 }
                             }
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (currentDhikr?.isCalibrated == true) uiState.formattedRhythm else "O‘rganilmoqda",
+                                text = if (currentDhikr?.isCalibrated == true) formattedRhythm else "O‘rganilmoqda",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
+                                color = primaryColor
                             )
                         }
                     }
@@ -626,7 +733,7 @@ fun TasbihApp(
                     OutlinedButton(
                         onClick = onResetClick,
                         shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, resetBorderColor),
+                        border = resetBtnBorder,
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = resetTextColor
                         ),
@@ -654,4 +761,23 @@ fun TasbihApp(
             }
         }
     }
+}
+
+/**
+ * RECOMPOSITION ISOLATION: Faqat vaqt o'zgarganda qayta chiziluvchi eng quyi composable.
+ * Tickerning vaqt yangilanishi butun TasbihApp yoki Scaffolding'ni qayta compose qilmaydi.
+ */
+@Composable
+private fun ActiveTimeText(
+    formattedTotalTimeFlow: Flow<String>,
+    modifier: Modifier = Modifier
+) {
+    val formattedTime by formattedTotalTimeFlow.collectAsStateWithLifecycle(initialValue = "0s")
+    Text(
+        text = formattedTime,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier
+    )
 }
