@@ -160,25 +160,6 @@ class MainActivity : ComponentActivity() {
                     viewModel.uiState.map { it.formattedTotalTime }.distinctUntilChanged()
                 }
 
-                // =========================================================================
-                // PERFORMANCE FIX: Silliq Sheet Dismiss (Graceful Animated Dismiss)
-                // ViewModel zikr tanlanganda darhol false qilsa ham, sheet animatsiyasi
-                // to'liq tugamaguncha composition'dan uzilmaydi.
-                // =========================================================================
-                var showDhikrSheet by remember { mutableStateOf(false) }
-                var showSettingsSheet by remember { mutableStateOf(false) }
-
-                LaunchedEffect(isDhikrSheetOpenState) {
-                    if (isDhikrSheetOpenState) {
-                        showDhikrSheet = true
-                    }
-                }
-
-                LaunchedEffect(isSettingsSheetOpenState) {
-                    if (isSettingsSheetOpenState) {
-                        showSettingsSheet = true
-                    }
-                }
 
                 // Ekranni doim yoqiq tutish sozlamasi
                 LaunchedEffect(settings.isKeepScreenOn) {
@@ -205,8 +186,8 @@ class MainActivity : ComponentActivity() {
                     onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
                 )
 
-                // Zikrlar ro'yxati sheet (Graceful dismiss bilan himoyalangan)
-                if (showDhikrSheet) {
+                // Zikrlar ro'yxati sheet
+                if (isDhikrSheetOpenState) {
                     DhikrSelectionSheet(
                         dhikrList = dhikrList,
                         selectedId = currentDhikr?.id,
@@ -214,20 +195,18 @@ class MainActivity : ComponentActivity() {
                         onAddNewClick = { viewModel.setAddDhikrDialogOpen(true) },
                         onDeleteCustom = viewModel::deleteCustomDhikr,
                         onDismiss = {
-                            showDhikrSheet = false
                             viewModel.setDhikrSheetOpen(false)
                         }
                     )
                 }
 
-                // Sozlamalar sheet (Graceful dismiss bilan himoyalangan)
-                if (showSettingsSheet) {
+                // Sozlamalar sheet
+                if (isSettingsSheetOpenState) {
                     SettingsSheet(
                         settings = settings,
                         onSettingsChanged = viewModel::updateSettings,
                         onTestVibration = viewModel::testVibration,
                         onDismiss = {
-                            showSettingsSheet = false
                             viewModel.setSettingsSheetOpen(false)
                         }
                     )
