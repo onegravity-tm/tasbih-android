@@ -77,10 +77,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.tasbih.app.data.model.AppSettings
 import com.tasbih.app.data.model.DhikrItem
 import com.tasbih.app.ui.TasbihViewModel
+import androidx.activity.compose.BackHandler
 import com.tasbih.app.ui.components.AddDhikrDialog
-import com.tasbih.app.ui.components.DhikrSelectionSheet
 import com.tasbih.app.ui.components.EditTargetDialog
-import com.tasbih.app.ui.components.SettingsSheet
+import com.tasbih.app.ui.screens.AppScreen
+import com.tasbih.app.ui.screens.DhikrSelectionScreen
+import com.tasbih.app.ui.screens.SettingsScreen
 import com.tasbih.app.ui.theme.SubtleDangerOutlineDark
 import com.tasbih.app.ui.theme.SubtleDangerOutlineLight
 import com.tasbih.app.ui.theme.SubtleDangerTextDark
@@ -139,14 +141,6 @@ class MainActivity : ComponentActivity() {
                     viewModel.uiState.map { it.dhikrList }.distinctUntilChanged()
                 }.collectAsStateWithLifecycle(initialValue = emptyList())
 
-                val isDhikrSheetOpenState by remember(viewModel) {
-                    viewModel.uiState.map { it.isDhikrSheetOpen }.distinctUntilChanged()
-                }.collectAsStateWithLifecycle(initialValue = false)
-
-                val isSettingsSheetOpenState by remember(viewModel) {
-                    viewModel.uiState.map { it.isSettingsSheetOpen }.distinctUntilChanged()
-                }.collectAsStateWithLifecycle(initialValue = false)
-
                 val isAddDhikrDialogOpen by remember(viewModel) {
                     viewModel.uiState.map { it.isAddDhikrDialogOpen }.distinctUntilChanged()
                 }.collectAsStateWithLifecycle(initialValue = false)
@@ -160,6 +154,11 @@ class MainActivity : ComponentActivity() {
                     viewModel.uiState.map { it.formattedTotalTime }.distinctUntilChanged()
                 }
 
+                var currentScreen by remember { mutableStateOf(AppScreen.Main) }
+
+                BackHandler(enabled = currentScreen != AppScreen.Main) {
+                    currentScreen = AppScreen.Main
+                }
 
                 // Ekranni doim yoqiq tutish sozlamasi
                 LaunchedEffect(settings.isKeepScreenOn) {
@@ -170,46 +169,45 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                TasbihApp(
-                    currentDhikr = currentDhikr,
-                    progress = progress,
-                    isTargetReached = isTargetReached,
-                    isFullScreenTapEnabled = settings.isFullScreenTapEnabled,
-                    isTimingPaused = isTimingPaused,
-                    formattedRhythm = formattedRhythm,
-                    formattedTotalTimeFlow = formattedTotalTimeFlow,
-                    onCounterClick = viewModel::onCounterClick,
-                    onResetClick = viewModel::onResetClick,
-                    onRelearnRhythmClick = viewModel::onRelearnRhythmClick,
-                    onOpenDhikrSheet = { viewModel.setDhikrSheetOpen(true) },
-                    onOpenSettingsSheet = { viewModel.setSettingsSheetOpen(true) },
-                    onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
-                )
-
-                // Zikrlar ro'yxati sheet
-                if (isDhikrSheetOpenState) {
-                    DhikrSelectionSheet(
-                        dhikrList = dhikrList,
-                        selectedId = currentDhikr?.id,
-                        onSelect = viewModel::selectDhikr,
-                        onAddNewClick = { viewModel.setAddDhikrDialogOpen(true) },
-                        onDeleteCustom = viewModel::deleteCustomDhikr,
-                        onDismiss = {
-                            viewModel.setDhikrSheetOpen(false)
-                        }
-                    )
-                }
-
-                // Sozlamalar sheet
-                if (isSettingsSheetOpenState) {
-                    SettingsSheet(
-                        settings = settings,
-                        onSettingsChanged = viewModel::updateSettings,
-                        onTestVibration = viewModel::testVibration,
-                        onDismiss = {
-                            viewModel.setSettingsSheetOpen(false)
-                        }
-                    )
+                when (currentScreen) {
+                    AppScreen.Main -> {
+                        TasbihApp(
+                            currentDhikr = currentDhikr,
+                            progress = progress,
+                            isTargetReached = isTargetReached,
+                            isFullScreenTapEnabled = settings.isFullScreenTapEnabled,
+                            isTimingPaused = isTimingPaused,
+                            formattedRhythm = formattedRhythm,
+                            formattedTotalTimeFlow = formattedTotalTimeFlow,
+                            onCounterClick = viewModel::onCounterClick,
+                            onResetClick = viewModel::onResetClick,
+                            onRelearnRhythmClick = viewModel::onRelearnRhythmClick,
+                            onOpenDhikrSheet = { currentScreen = AppScreen.DhikrSelection },
+                            onOpenSettingsSheet = { currentScreen = AppScreen.Settings },
+                            onEditTargetClick = { viewModel.setEditTargetDialogOpen(true) }
+                        )
+                    }
+                    AppScreen.Settings -> {
+                        SettingsScreen(
+                            settings = settings,
+                            onSettingsChanged = viewModel::updateSettings,
+                            onTestVibration = viewModel::testVibration,
+                            onBack = { currentScreen = AppScreen.Main }
+                        )
+                    }
+                    AppScreen.DhikrSelection -> {
+                        DhikrSelectionScreen(
+                            dhikrList = dhikrList,
+                            selectedId = currentDhikr?.id,
+                            onSelect = { id ->
+                                viewModel.selectDhikr(id)
+                                currentScreen = AppScreen.Main
+                            },
+                            onAddNewClick = { viewModel.setAddDhikrDialogOpen(true) },
+                            onDeleteCustom = viewModel::deleteCustomDhikr,
+                            onBack = { currentScreen = AppScreen.Main }
+                        )
+                    }
                 }
 
                 // Yangi zikr qo'shish dialogi

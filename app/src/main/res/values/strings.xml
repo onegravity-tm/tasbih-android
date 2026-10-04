@@ -19,6 +19,7 @@
     <string name="cd_add_dhikr">Yangi zikr qo‘shish</string>
     <string name="cd_delete_dhikr">Zikrni o‘chirish</string>
     <string name="cd_selected">Tanlangan</string>
+    <string name="cd_back">Orqaga</string>
 
     <!-- Vibratsiya sozlamalari -->
     <string name="settings_title">Sozlamalar</string>
